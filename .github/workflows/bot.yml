@@ -3,7 +3,13 @@ name: Smart Money bot
 on:
   schedule:
     - cron: "*/10 * * * *"   # every 10 minutes (GitHub may delay runs when busy)
-  workflow_dispatch: {}      # "Run workflow" button for manual runs
+  workflow_dispatch:         # "Run workflow" button for manual runs
+    inputs:
+      command:
+        description: "What to run"
+        type: choice
+        default: tick
+        options: [tick, check-telegram, test-telegram, test-x]
 
 concurrency:
   group: smart-money-bot
@@ -25,7 +31,7 @@ jobs:
           restore-keys: msm-state-
 
       - name: Run one cycle
-        run: mkdir -p state && python3 -m msm tick
+        run: mkdir -p state && python3 -m msm ${{ inputs.command || 'tick' }}
         env:
           DB_PATH: state/msm.sqlite3
           # Secrets: repo Settings > Secrets and variables > Actions > Secrets
