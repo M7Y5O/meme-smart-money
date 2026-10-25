@@ -50,6 +50,7 @@ class Settings:
     weekly_hour_et: int
     backfill_hours: int
     pnl_period_label: str = ""
+    x_drafts_chat: str = ""  # Telegram chat that receives X posts to publish by hand
 
     @classmethod
     def from_env(cls):
@@ -76,6 +77,7 @@ class Settings:
             weekly_hour_et=_env("WEEKLY_HOUR_ET", 10, int),
             backfill_hours=_env("BACKFILL_HOURS", 24, int),
             pnl_period_label=_env("PNL_PERIOD_LABEL", ""),
+            x_drafts_chat=_env("X_DRAFTS_CHAT_ID", ""),
         )
 
 
