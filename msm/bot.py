@@ -40,6 +40,11 @@ class Bot:
         """Once a day, replace the tracked wallets with today's top traders from the Fomo API."""
         today = dt.datetime.fromtimestamp(self.clock(), ET).date().isoformat()
         if not force and self.db.get_meta("last_wallet_refresh") == today:
+            if not self.wallets:  # new process (e.g. GitHub Actions run): reload today's list from the DB
+                saved = self.db.latest_traders()
+                if saved:
+                    self.set_wallets([{"label": t["label"], "address": t["address"], "x": t.get("x") or ""}
+                                      for t in saved])
             return False
         try:
             traders = self.top_traders()
