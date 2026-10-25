@@ -1,0 +1,5 @@
+[
+  {"label": "trader name as shown on Fomo", "address": "SOLANA_WALLET_ADDRESS_1", "x": "@their_x_handle_if_any"},
+  {"label": "second trader", "address": "SOLANA_WALLET_ADDRESS_2", "x": ""},
+  {"label": "third trader", "address": "SOLANA_WALLET_ADDRESS_3", "x": ""}
+]
