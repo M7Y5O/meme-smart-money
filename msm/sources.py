@@ -42,9 +42,73 @@ def fetch_new_transactions(api_key, wallet, last_sig=None, since_ts=None, max_pa
     return out
 
 
+HELIUS_RPC = os.environ.get("HELIUS_RPC", "https://mainnet.helius-rpc.com")
+
+
+def _rpc(api_key, method, params):
+    r = http.post(f"{HELIUS_RPC}/?api-key={api_key}",
+                  body={"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+    if isinstance(r, dict) and r.get("error"):
+        raise RuntimeError(f"{method}: {r['error']}")
+    return (r or {}).get("result")
+
+
+def rpc_tx_to_simple(tx, sig, wallet):
+    """Turn a getTransaction (jsonParsed) result into the small shape parse_buy() reads:
+    the wallet's SOL change (fee excluded) and its per-token balance changes."""
+    if not tx:
+        return None
+    meta = tx.get("meta") or {}
+    msg = (tx.get("transaction") or {}).get("message") or {}
+    keys = [k.get("pubkey") if isinstance(k, dict) else k for k in msg.get("accountKeys") or []]
+    native, tokens = [], []
+    if wallet in keys:
+        i = keys.index(wallet)
+        pre, post = meta.get("preBalances") or [], meta.get("postBalances") or []
+        if i < len(pre) and i < len(post):
+            delta = post[i] - pre[i]
+            if i == 0:  # fee payer: don't count the network fee as "spent on the coin"
+                delta += meta.get("fee") or 0
+            if delta < 0:
+                native.append({"fromUserAccount": wallet, "toUserAccount": "", "amount": -delta})
+    bal = {}
+    for side, sign in (("preTokenBalances", -1), ("postTokenBalances", 1)):
+        for b in meta.get(side) or []:
+            if b.get("owner") != wallet:
+                continue
+            amt = float(((b.get("uiTokenAmount") or {}).get("uiAmountString")) or 0)
+            bal[b.get("mint")] = bal.get(b.get("mint"), 0) + sign * amt
+    for mint, d in bal.items():
+        if d > 0:
+            tokens.append({"fromUserAccount": "", "toUserAccount": wallet, "mint": mint, "tokenAmount": d})
+        elif d < 0:
+            tokens.append({"fromUserAccount": wallet, "toUserAccount": "", "mint": mint, "tokenAmount": -d})
+    return {"signature": sig, "timestamp": tx.get("blockTime") or 0, "transactionError": meta.get("err"),
+            "nativeTransfers": native, "tokenTransfers": tokens}
+
+
+def fetch_new_transactions_rpc(api_key, wallet, last_sig=None, since_ts=None, max_tx=40):
+    """Cheap path (1 Helius credit per call): list new signatures, then fetch each transaction."""
+    opts = {"limit": 100}
+    if last_sig:
+        opts["until"] = last_sig
+    sigs = _rpc(api_key, "getSignaturesForAddress", [wallet, opts]) or []
+    sigs = [x for x in sigs if not x.get("err") and (not since_ts or (x.get("blockTime") or 0) >= since_ts)]
+    if not sigs:
+        return []
+    out = [{"signature": sigs[0]["signature"], "timestamp": sigs[0].get("blockTime") or 0, "cursor_only": True}]
+    for x in sigs[:max_tx]:
+        tx = _rpc(api_key, "getTransaction", [x["signature"], {"encoding": "jsonParsed",
+                                                               "maxSupportedTransactionVersion": 0}])
+        simple = rpc_tx_to_simple(tx, x["signature"], wallet)
+        if simple:
+            out.append(simple)
+    return out
+
+
 def parse_buy(tx, wallet):
     """Return buy events (one per coin received) if `wallet` paid SOL/USDC/USDT to receive a coin."""
-    if tx.get("transactionError"):
+    if tx.get("transactionError") or tx.get("cursor_only"):
         return []
     received, sent_coin = {}, set()
     sol_spent, usd_spent = 0.0, 0.0

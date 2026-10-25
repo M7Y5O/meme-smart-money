@@ -18,7 +18,7 @@ class Bot:
         self.set_wallets(wallets)
         lb_cfg = leaderboard.config_from_env()
         self.top_traders = top_traders or (lambda: leaderboard.fetch_top_traders(lb_cfg))
-        self.fetch = fetch or (lambda w, last, since: sources.fetch_new_transactions(settings.helius_api_key, w, last, since))
+        self.fetch = fetch or (lambda w, last, since: sources.fetch_new_transactions_rpc(settings.helius_api_key, w, last, since))
         self.market = market or sources.token_market_data
         self.post_x = post_x or (lambda text: publish.post_x(settings, text))
         self.post_tg = post_tg or (lambda html: publish.post_telegram(settings, html))
