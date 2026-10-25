@@ -1,0 +1,58 @@
+name: Smart Money bot
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 minutes (GitHub may delay runs when busy)
+  workflow_dispatch: {}      # "Run workflow" button for manual runs
+
+concurrency:
+  group: smart-money-bot
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      # The bot's memory (seen trades, posted alerts) lives in a SQLite file kept between runs.
+      - name: Restore state
+        uses: actions/cache/restore@v4
+        with:
+          path: state
+          key: msm-state-${{ github.run_id }}
+          restore-keys: msm-state-
+
+      - name: Run one cycle
+        run: mkdir -p state && python3 -m msm tick
+        env:
+          DB_PATH: state/msm.sqlite3
+          # Secrets: repo Settings > Secrets and variables > Actions > Secrets
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          FOMO_API_KEY: ${{ secrets.FOMO_API_KEY }}
+          # Settings: repo Settings > Secrets and variables > Actions > Variables
+          TELEGRAM_CHANNEL: ${{ vars.TELEGRAM_CHANNEL }}
+          FOMO_REF_LINK: ${{ vars.FOMO_REF_LINK }}
+          FOMO_LEADERBOARD_URL: ${{ vars.FOMO_LEADERBOARD_URL }}
+          FOMO_AUTH_HEADER: ${{ vars.FOMO_AUTH_HEADER }}
+          FOMO_AUTH_PREFIX: ${{ vars.FOMO_AUTH_PREFIX }}
+          FOMO_ITEMS_PATH: ${{ vars.FOMO_ITEMS_PATH }}
+          FOMO_FIELD_NAME: ${{ vars.FOMO_FIELD_NAME }}
+          FOMO_FIELD_WALLET: ${{ vars.FOMO_FIELD_WALLET }}
+          FOMO_FIELD_PNL: ${{ vars.FOMO_FIELD_PNL }}
+          FOMO_FIELD_X: ${{ vars.FOMO_FIELD_X }}
+          PNL_PERIOD_LABEL: ${{ vars.PNL_PERIOD_LABEL }}
+          DRY_RUN: ${{ vars.DRY_RUN || 'true' }}
+
+      - name: Save state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state
+          key: msm-state-${{ github.run_id }}
