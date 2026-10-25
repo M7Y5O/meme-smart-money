@@ -1,9 +1,21 @@
 """Post templates. X posts must stay <= 280 characters."""
 import html
+import os
 import re
 
 X_LIMIT = 280
 NFA = "Not financial advice."
+
+
+def receipts_bot():
+    """Telegram username of the Receipts trader-check bot ("" turns the cross-promo off)."""
+    v = os.environ.get("RECEIPTS_BOT")
+    return "fomoreceipts_bot" if v is None else v.strip().lstrip("@")
+
+
+def receipts_tg(line):
+    bot = receipts_bot()
+    return [f'{line} <a href="https://t.me/{bot}">@{bot}</a>'] if bot else []
 
 
 def money(x):
@@ -68,6 +80,7 @@ def cluster_tg(c, token, window_h, labels, ref_link):
         lines.append(f"Liquidity: {money(token['liquidity'])}")
     if labels:
         lines += ["", "Bought by: " + ", ".join(html.escape(l) for l in labels)]
+        lines += receipts_tg("🧾 Check their track record before you copy:")
     lines += ["", f"<code>{c['mint']}</code>"]
     if token and token.get("url"):
         lines.append(f'<a href="{token["url"]}">Chart</a>')
@@ -93,6 +106,7 @@ def recap_tg(rows, tokens, title, ref_link, n=10):
         w = len(r["wallets"])
         extra = f" · mcap {money(t.get('last_mcap'))}" if t.get("last_mcap") else ""
         lines.append(f"{i}. <b>{ticker(t, r['mint'])}</b>: {w} trader{'s' if w > 1 else ''}{extra}")
+    lines += [""] + receipts_tg("🧾 Score any Fomo trader:") if receipts_bot() else []
     if ref_link:
         lines += ["", f"Trade on Fomo: {ref_link}", "(affiliate link, I earn a commission)"]
     lines += ["", NFA]
@@ -110,6 +124,11 @@ def leaderboard_x(traders, period="", n=5):
         name = re.sub(r"[@\n]", "", t["label"])[:20]
         lines.append(f"{i}. {name} {signed_money(t['pnl'])}")
     lines += ["", "Full list on Telegram (link in bio)", NFA]
+    bot = receipts_bot()
+    if bot:
+        with_cta = lines[:-2] + [f"Skill or luck? Check any trader: t.me/{bot}", NFA]
+        if x_len("\n".join(with_cta)) <= X_LIMIT:
+            return "\n".join(with_cta)
     return _fit("\n".join(lines))
 
 
@@ -118,6 +137,7 @@ def leaderboard_tg(traders, period, ref_link, n=10):
     for i, t in enumerate(traders[:n], 1):
         x = f" ({html.escape(t['x'])})" if t.get("x") else ""
         lines.append(f"{i}. <b>{html.escape(t['label'])}</b>{x}: {signed_money(t['pnl'])}")
+    lines += [""] + receipts_tg("🧾 Skill or luck? Get any trader's score card:") if receipts_bot() else []
     if ref_link:
         lines += ["", f"Trade on Fomo: {ref_link}", "(affiliate link, I earn a commission)"]
     lines += ["", NFA + " Past results don't predict future ones."]
