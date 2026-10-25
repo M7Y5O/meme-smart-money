@@ -62,6 +62,34 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(sources.parse_buy(tx, W1), [])
 
 
+class RpcParseTests(unittest.TestCase):
+    def rpc_tx(self, sol_delta_lamports, token_pre, token_post, fee=5000, payer=W1):
+        return {"blockTime": 1000, "meta": {
+            "err": None, "fee": fee,
+            "preBalances": [5_000_000_000, 0], "postBalances": [5_000_000_000 + sol_delta_lamports - fee, 0],
+            "preTokenBalances": [{"owner": W1, "mint": COIN, "uiTokenAmount": {"uiAmountString": str(token_pre)}}] if token_pre is not None else [],
+            "postTokenBalances": [{"owner": W1, "mint": COIN, "uiTokenAmount": {"uiAmountString": str(token_post)}}]},
+            "transaction": {"message": {"accountKeys": [{"pubkey": payer}, {"pubkey": "Pool"}]}}}
+
+    def test_buy_with_sol(self):
+        simple = sources.rpc_tx_to_simple(self.rpc_tx(-500_000_000, None, 1000), "sig", W1)
+        b = sources.parse_buy(simple, W1)
+        self.assertEqual(len(b), 1)
+        self.assertAlmostEqual(b[0]["sol_spent"], 0.5)
+        self.assertEqual(b[0]["mint"], COIN)
+
+    def test_sell_not_buy(self):
+        simple = sources.rpc_tx_to_simple(self.rpc_tx(+800_000_000, 1000, 0), "sig", W1)
+        self.assertEqual(sources.parse_buy(simple, W1), [])
+
+    def test_fee_only_not_buy(self):
+        simple = sources.rpc_tx_to_simple(self.rpc_tx(0, 0, 10), "sig", W1)  # airdrop, only fee paid
+        self.assertEqual(sources.parse_buy(simple, W1), [])
+
+    def test_cursor_marker_ignored(self):
+        self.assertEqual(sources.parse_buy({"signature": "x", "cursor_only": True}, W1), [])
+
+
 class DetectTests(unittest.TestCase):
     def test_cluster_needs_distinct_wallets(self):
         buys = [{"mint": COIN, "wallet": W1, "ts": 100}, {"mint": COIN, "wallet": W1, "ts": 110},
