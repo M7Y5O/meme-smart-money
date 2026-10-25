@@ -85,5 +85,8 @@ def fetch_top_traders(cfg):
         return None
     headers = {}
     if cfg["api_key"]:
-        headers[cfg["auth_header"]] = cfg["auth_prefix"] + cfg["api_key"]
+        prefix = cfg["auth_prefix"]
+        if prefix and not prefix.endswith(" "):
+            prefix += " "  # "Bearer" -> "Bearer " (GitHub variables trim trailing spaces)
+        headers[cfg["auth_header"]] = prefix + cfg["api_key"]
     return parse_traders(http.get(cfg["url"], headers=headers), cfg)
