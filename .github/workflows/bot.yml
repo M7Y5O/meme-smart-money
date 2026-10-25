@@ -9,7 +9,7 @@ on:
         description: "What to run"
         type: choice
         default: tick
-        options: [tick, tiktok, check-telegram, telegram-chats, test-x-draft, test-telegram, test-x]
+        options: [tick, sync, tiktok, check-telegram, telegram-chats, test-x-draft, test-telegram, test-x]
 
 concurrency:
   group: smart-money-bot
@@ -61,6 +61,7 @@ jobs:
           X_ACCESS_SECRET: ${{ vars.POST_TO_X != 'false' && secrets.X_ACCESS_SECRET || '' }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           FOMO_API_KEY: ${{ secrets.FOMO_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           # Settings: repo Settings > Secrets and variables > Actions > Variables
           TELEGRAM_CHANNEL: ${{ vars.TELEGRAM_CHANNEL }}
           X_DRAFTS_CHAT_ID: ${{ vars.X_DRAFTS_CHAT_ID }}
