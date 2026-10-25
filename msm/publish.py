@@ -55,3 +55,29 @@ def send_x_draft(s, kind, text):
     import html
     msg = f"\U0001F4DD <b>X post to publish</b> ({html.escape(kind)})\n\n<pre>{html.escape(text)}</pre>"
     return post_telegram(s, msg, chat_id=s.x_drafts_chat)
+
+
+def send_video(s, chat_id, path, caption_html):
+    """Upload a video to a Telegram chat (multipart/form-data, stdlib only)."""
+    import os
+    import uuid
+    boundary = uuid.uuid4().hex
+    fields = {"chat_id": str(chat_id), "caption": caption_html, "parse_mode": "HTML", "supports_streaming": "true"}
+    parts = []
+    for k, v in fields.items():
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
+    with open(path, "rb") as f:
+        data = f.read()
+    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="video"; filename="{os.path.basename(path)}"\r\n'
+                 f'Content-Type: video/mp4\r\n\r\n'.encode() + data + b"\r\n")
+    parts.append(f"--{boundary}--\r\n".encode())
+    url = f"https://api.telegram.org/bot{s.telegram_bot_token}/sendVideo"
+    r = http.post(url, headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+                  body=b"".join(parts), timeout=120)
+    return str(((r or {}).get("result") or {}).get("message_id", ""))
+
+
+def send_tiktok_draft(s, kind, path, caption):
+    import html
+    cap = f"\U0001F3AC <b>TikTok to post</b> ({html.escape(kind)})\n\n<pre>{html.escape(caption)}</pre>"
+    return send_video(s, s.x_drafts_chat, path, cap)
