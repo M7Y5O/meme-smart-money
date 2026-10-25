@@ -5,6 +5,7 @@
   python -m msm recap          # build and publish the daily recap now
   python -m msm weekly         # build and publish the weekly post now
   python -m msm test-telegram  # send a test message to your Telegram channel
+  python -m msm check-telegram # check the bot is admin of the channel (posts nothing)
   python -m msm test-x         # post a test tweet (careful: it is public)
   python -m msm traders        # fetch and print today's top traders from the Fomo API
 """
@@ -25,6 +26,18 @@ def main(argv):
     s = Settings.from_env()
     if cmd == "test-telegram":
         print("message id:", publish.post_telegram(s, "✅ Smart Money bot is connected."))
+        return
+    if cmd == "check-telegram":  # read-only: nothing is posted
+        from . import http
+        base = f"https://api.telegram.org/bot{s.telegram_bot_token}"
+        me = (http.get(f"{base}/getMe") or {}).get("result") or {}
+        print("bot:", "@" + str(me.get("username")))
+        chat = (http.get(f"{base}/getChat?chat_id={s.telegram_channel}") or {}).get("result") or {}
+        print("channel:", chat.get("title"), chat.get("username"))
+        m = (http.get(f"{base}/getChatMember?chat_id={s.telegram_channel}&user_id={me.get('id')}") or {}).get("result") or {}
+        print("status:", m.get("status"), "| can_post_messages:", m.get("can_post_messages"))
+        if m.get("status") != "administrator" or not m.get("can_post_messages"):
+            sys.exit("bot cannot post in the channel")
         return
     if cmd == "test-x":
         print("tweet id:", publish.post_x(s, "Testing the Smart Money data feed. Not financial advice."))
