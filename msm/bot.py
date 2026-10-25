@@ -1,10 +1,12 @@
 """Orchestration: poll wallets -> store buys -> detect -> publish."""
 import datetime as dt
 import logging
+import os
+import tempfile
 import time
 from zoneinfo import ZoneInfo
 
-from . import detect, fmt, leaderboard, publish, sources
+from . import detect, fmt, leaderboard, publish, sources, video
 
 ET = ZoneInfo("America/New_York")
 log = logging.getLogger("msm")
@@ -23,6 +25,8 @@ class Bot:
         self.post_x = post_x or (lambda text: publish.post_x(settings, text))
         self.post_tg = post_tg or (lambda html: publish.post_telegram(settings, html))
         self.send_x_draft = lambda kind, text: publish.send_x_draft(settings, kind, text)
+        self.send_tiktok = lambda kind, path, caption: publish.send_tiktok_draft(settings, kind, path, caption)
+        self.make_videos = video.available()
         self.clock = clock or time.time
         # First time this bot ever ran. Clusters older than this are never posted, so the first
         # run (which backfills history) stays quiet. Stored, so scheduled runs share one value.
@@ -137,6 +141,41 @@ class Bot:
                 log.error("Telegram post failed: %s", e)
                 self.db.log_post(kind, "telegram", tg_html, False, str(e)[:200], ts=self.clock())
 
+    def tiktok(self, kind, render, caption):
+        """Render a TikTok video from real data and send it, with a ready-to-copy caption, to your Telegram."""
+        if not self.make_videos:
+            log.info("tiktok %s skipped: Pillow/ffmpeg/fonts not available", kind)
+            return False
+        if not self.s.dry_run and not (self.s.x_drafts_chat and self.s.telegram_bot_token):
+            return False
+        path = os.path.join(tempfile.gettempdir(), f"msm-tiktok-{kind.replace(' ', '-')}.mp4")
+        try:
+            if not render(path):
+                log.info("tiktok %s skipped: not enough data", kind)
+                return False
+            if self.s.dry_run:
+                print(f"----- [DRY RUN] tiktok {kind} -> {path} -----\n{caption}\n")
+                return True
+            mid = self.send_tiktok(kind, path, caption)
+            self.db.log_post(kind, "tiktok_draft", caption, True, mid, ts=self.clock())
+            return True
+        except Exception as e:
+            log.error("tiktok %s failed: %s", kind, e)
+            self.db.log_post(kind, "tiktok_draft", caption, False, str(e)[:200], ts=self.clock())
+            return False
+
+    def tiktok_recap(self, rows, tokens, period="last 24h"):
+        now = self.clock()
+        return self.tiktok("daily recap" if period == "last 24h" else "weekly recap",
+                           lambda p: video.render_recap(rows, tokens, p, now, period),
+                           video.recap_caption(rows, tokens, period))
+
+    def tiktok_leaderboard(self, traders):
+        now, period = self.clock(), self.s.pnl_period_label
+        return self.tiktok("weekly leaderboard",
+                           lambda p: video.render_leaderboard(traders, p, now, period),
+                           video.leaderboard_caption(traders, period))
+
     # ---------- jobs ----------
     def check_clusters(self):
         now = int(self.clock())
@@ -179,6 +218,7 @@ class Bot:
             return False
         self.publish("recap", fmt.recap_x(rows, tokens),
                      fmt.recap_tg(rows, tokens, "Smart-money recap, last 24h", self.s.fomo_ref_link))
+        self.tiktok_recap(rows, tokens)
         return True
 
     def maybe_weekly(self, force=False):
@@ -204,6 +244,7 @@ class Bot:
         traders.sort(key=lambda t: -t["pnl"])
         period = self.s.pnl_period_label
         self.publish("leaderboard", fmt.leaderboard_x(traders, period), fmt.leaderboard_tg(traders, period, self.s.fomo_ref_link))
+        self.tiktok_leaderboard(traders)
         return True
 
     def tick(self):
