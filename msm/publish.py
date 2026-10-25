@@ -42,9 +42,16 @@ def post_x(s, text):
     return (r or {}).get("data", {}).get("id", "")
 
 
-def post_telegram(s, html_text):
+def post_telegram(s, html_text, chat_id=None):
     url = f"https://api.telegram.org/bot{s.telegram_bot_token}/sendMessage"
-    body = {"chat_id": s.telegram_channel, "text": html_text, "parse_mode": "HTML",
+    body = {"chat_id": chat_id or s.telegram_channel, "text": html_text, "parse_mode": "HTML",
             "disable_web_page_preview": True}
     r = http.post(url, body=body)
     return str(((r or {}).get("result") or {}).get("message_id", ""))
+
+
+def send_x_draft(s, kind, text):
+    """Send an X post to your private Telegram chat, ready to copy (tap the block to copy it)."""
+    import html
+    msg = f"\U0001F4DD <b>X post to publish</b> ({html.escape(kind)})\n\n<pre>{html.escape(text)}</pre>"
+    return post_telegram(s, msg, chat_id=s.x_drafts_chat)
