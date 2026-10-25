@@ -9,6 +9,7 @@
   python -m msm telegram-chats # list chat ids that messaged the bot (for X_DRAFTS_CHAT_ID)
   python -m msm test-x-draft   # send a sample X post to X_DRAFTS_CHAT_ID
   python -m msm test-x        # post a test tweet (careful: it is public)
+  python -m msm tiktok         # render today's TikTok videos (real data), send them to X_DRAFTS_CHAT_ID
   python -m msm traders        # fetch and print today's top traders from the Fomo API
 """
 import logging
@@ -79,6 +80,13 @@ def main(argv):
         bot.refresh_wallets()
         bot.poll()
         bot.maybe_recap(force=True)
+    elif cmd == "tiktok":  # render today's videos from real data and send them to X_DRAFTS_CHAT_ID now
+        bot.refresh_wallets()
+        bot.poll()
+        rows, tokens = bot._ranked(int(bot.clock()) - 24 * 3600, 10)
+        print("recap video:", bot.tiktok_recap(rows, tokens))
+        traders = sorted([t for t in bot.db.latest_traders() if t.get("pnl") is not None], key=lambda t: -t["pnl"])
+        print("leaderboard video:", bot.tiktok_leaderboard(traders))
     elif cmd == "weekly":
         bot.refresh_wallets()
         bot.poll()
