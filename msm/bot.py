@@ -6,7 +6,7 @@ import tempfile
 import time
 from zoneinfo import ZoneInfo
 
-from . import detect, fmt, leaderboard, publish, sources, video
+from . import detect, fmt, leaderboard, publish, sources, sync, video
 
 ET = ZoneInfo("America/New_York")
 log = logging.getLogger("msm")
@@ -253,6 +253,7 @@ class Bot:
         self.check_clusters()
         self.maybe_recap()
         self.maybe_weekly()
+        sync.maybe_sync(self)
 
     def run_forever(self):
         log.info("bot started: %d wallets, dry_run=%s", len(self.wallets), self.s.dry_run)
