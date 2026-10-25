@@ -196,6 +196,17 @@ class LeaderboardTests(unittest.TestCase):
         self.assertEqual(t[0]["pnl"], 52300.5)
         self.assertEqual(t[2]["rank"], 3)
 
+    def test_fomoapi_io_shape(self):
+        payload = {"window": "7d", "count": 2, "traders": [
+            {"rank": 1, "handle": "CryptoKaleo", "displayName": "K A L E O", "pnlUsd": 151383,
+             "wallets": {"solana": W1, "evm": "0x7b4d"}},
+            {"rank": 2, "handle": "evmonly", "pnlUsd": 9000, "wallets": {"solana": None, "evm": "0xabc"}}]}
+        cfg = {"items_path": "traders", "field_name": "handle", "field_wallet": "wallets.solana",
+               "field_pnl": "pnlUsd", "field_x": "", "top_n": 25}
+        t = leaderboard.parse_traders(payload, cfg)
+        self.assertEqual(len(t), 1)
+        self.assertEqual((t[0]["label"], t[0]["address"], t[0]["pnl"]), ("CryptoKaleo", W1, 151383.0))
+
     def test_top_n(self):
         self.assertEqual(len(leaderboard.parse_traders(self.PAYLOAD, {**self.CFG, "top_n": 2})), 2)
 
