@@ -1,4 +1,5 @@
 """Data sources: Helius (wallet swaps on Solana) and DexScreener (token market data)."""
+import logging
 import os
 import time
 import urllib.parse
@@ -43,6 +44,9 @@ def fetch_new_transactions(api_key, wallet, last_sig=None, since_ts=None, max_pa
 
 
 HELIUS_RPC = os.environ.get("HELIUS_RPC", "https://mainnet.helius-rpc.com")
+# Highest Solana transaction version we can read (v1 transactions exist since 2026).
+TX_VERSION = int(os.environ.get("SOLANA_MAX_TX_VERSION", "1"))
+log = logging.getLogger("msm")
 
 
 def _rpc(api_key, method, params):
@@ -98,8 +102,12 @@ def fetch_new_transactions_rpc(api_key, wallet, last_sig=None, since_ts=None, ma
         return []
     out = [{"signature": sigs[0]["signature"], "timestamp": sigs[0].get("blockTime") or 0, "cursor_only": True}]
     for x in sigs[:max_tx]:
-        tx = _rpc(api_key, "getTransaction", [x["signature"], {"encoding": "jsonParsed",
-                                                               "maxSupportedTransactionVersion": 0}])
+        try:
+            tx = _rpc(api_key, "getTransaction", [x["signature"], {
+                "encoding": "jsonParsed", "maxSupportedTransactionVersion": TX_VERSION}])
+        except Exception as e:  # one unreadable transaction must not hide the wallet's other trades
+            log.warning("skipping tx %s: %s", x["signature"][:12], str(e)[:160])
+            continue
         simple = rpc_tx_to_simple(tx, x["signature"], wallet)
         if simple:
             out.append(simple)
