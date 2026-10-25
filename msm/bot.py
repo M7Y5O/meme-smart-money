@@ -22,6 +22,7 @@ class Bot:
         self.market = market or sources.token_market_data
         self.post_x = post_x or (lambda text: publish.post_x(settings, text))
         self.post_tg = post_tg or (lambda html: publish.post_telegram(settings, html))
+        self.send_x_draft = lambda kind, text: publish.send_x_draft(settings, kind, text)
         self.clock = clock or time.time
         # First time this bot ever ran. Clusters older than this are never posted, so the first
         # run (which backfills history) stays quiet. Stored, so scheduled runs share one value.
@@ -111,7 +112,14 @@ class Bot:
             print(f"----- [DRY RUN] {kind} -> Telegram -----\n{tg_html}\n")
             self.db.log_post(kind, "dry", x_text, True, ref, ts=self.clock())
             return
-        if x_text and self.s.x_api_key:
+        if x_text and self.s.x_drafts_chat and self.s.telegram_bot_token:
+            try:
+                mid = self.send_x_draft(kind, x_text)
+                self.db.log_post(kind, "x_draft", x_text, True, mid, ts=self.clock())
+            except Exception as e:
+                log.error("X draft to Telegram failed: %s", e)
+                self.db.log_post(kind, "x_draft", x_text, False, str(e)[:200], ts=self.clock())
+        elif x_text and self.s.x_api_key:
             if self.db.x_posts_since(self._et_midnight_ts()) >= self.s.max_x_posts_per_day:
                 log.info("X daily cap reached, skipping X for %s", kind)
             else:
