@@ -192,7 +192,7 @@ def _outro(t0, tagline):
     els = []
     big = text_img([[("Follow the ", INK), ("money.", ACCENT)]], 100, align="center")
     els.append(El(big, (W - big.width) / 2, H * 0.40, t0, dy=60, dur=0.6))
-    sub = text_img([[(tagline, MUTED)]], 40, "Medium", align="center")
+    sub = text_img([[(tagline, MUTED)]], fit_size(tagline, "Medium", 40, W - 2 * MARGIN - 40), "Medium", align="center")
     els.append(El(sub, (W - sub.width) / 2, H * 0.40 + big.height + 40, t0 + 0.35))
     sm = text_img([[("$SM", INK)]], 44)
     els.append(El(sm, MARGIN, 1430, t0 + 0.6, dy=0))
@@ -278,23 +278,30 @@ def render_leaderboard(traders, out_path, now_ts, period=""):
     t_out = list_end + 3.2
     for e in list_els:
         e.t_out = t_out
-    els += list_els + _outro(t_out + 0.4, "weekly leaderboard every Sunday")
+    bot = fmt.receipts_bot()
+    els += list_els + _outro(t_out + 0.4, f"skill or luck? check any trader: @{bot}" if bot
+                             else "weekly leaderboard every Sunday")
     return encode(els, t_out + 3.6, out_path)
 
 
 HASHTAGS = "#memecoin #memecoins #solana #crypto #smartmoney #cryptotrading"
 
 
+def _receipts_line():
+    bot = fmt.receipts_bot()
+    return f"\nScore any Fomo trader before you copy them: @{bot} on Telegram." if bot else ""
+
+
 def recap_caption(rows, tokens, period="last 24h"):
     names = [fmt.ticker(tokens.get(r["mint"]), r["mint"]) for r in rows[:3]]
     when = "today" if period == "last 24h" else "this week"
     return (f"What smart money bought {when}: {', '.join(names)} 👀\n"
-            f"Data from the wallets of the top traders on Fomo. Follow for daily smart-money data.\n"
-            f"Not financial advice.\n\n{HASHTAGS}")
+            f"Data from the wallets of the top traders on Fomo. Follow for daily smart-money data."
+            f"{_receipts_line()}\nNot financial advice.\n\n{HASHTAGS}")
 
 
 def leaderboard_caption(traders, period=""):
     top = traders[0]
     return (f"This week's top Fomo trader: {top['label']} at {fmt.signed_money(top['pnl'])} PnL 🏆\n"
-            f"Top 5 by PnL{' ' + period if period else ''}. Past results don't predict future ones.\n"
-            f"Not financial advice.\n\n{HASHTAGS}")
+            f"Top 5 by PnL{' ' + period if period else ''}. Past results don't predict future ones."
+            f"{_receipts_line()}\nNot financial advice.\n\n{HASHTAGS}")
