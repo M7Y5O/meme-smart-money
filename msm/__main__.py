@@ -6,7 +6,9 @@
   python -m msm weekly         # build and publish the weekly post now
   python -m msm test-telegram  # send a test message to your Telegram channel
   python -m msm check-telegram # check the bot is admin of the channel (posts nothing)
-  python -m msm test-x         # post a test tweet (careful: it is public)
+  python -m msm telegram-chats # list chat ids that messaged the bot (for X_DRAFTS_CHAT_ID)
+  python -m msm test-x-draft   # send a sample X post to X_DRAFTS_CHAT_ID
+  python -m msm test-x        # post a test tweet (careful: it is public)
   python -m msm traders        # fetch and print today's top traders from the Fomo API
 """
 import logging
@@ -38,6 +40,21 @@ def main(argv):
         print("status:", m.get("status"), "| can_post_messages:", m.get("can_post_messages"))
         if m.get("status") != "administrator" or not m.get("can_post_messages"):
             sys.exit("bot cannot post in the channel")
+        return
+    if cmd == "telegram-chats":  # read-only: lists private chats that messaged the bot
+        from . import http
+        upd = (http.get(f"https://api.telegram.org/bot{s.telegram_bot_token}/getUpdates") or {}).get("result") or []
+        seen = set()
+        for u in upd:
+            c = ((u.get("message") or {}).get("chat")) or {}
+            if c.get("type") == "private" and c.get("id") not in seen:
+                seen.add(c.get("id"))
+                print("chat id:", c.get("id"), "|", c.get("first_name"), "@" + str(c.get("username")))
+        if not seen:
+            print("no private chat yet: send /start to the bot from your Telegram account, then run this again")
+        return
+    if cmd == "test-x-draft":
+        print("message id:", publish.send_x_draft(s, "test", "Testing the Smart Money data feed. Not financial advice."))
         return
     if cmd == "test-x":
         print("tweet id:", publish.post_x(s, "Testing the Smart Money data feed. Not financial advice."))
