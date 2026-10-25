@@ -1,0 +1,50 @@
+"""Publishing to X (API v2, OAuth 1.0a user context) and Telegram (Bot API)."""
+import base64
+import hashlib
+import hmac
+import secrets
+import time
+import urllib.parse
+
+from . import http
+
+X_TWEET_URL = "https://api.x.com/2/tweets"
+
+
+def _pct(s):
+    return urllib.parse.quote(str(s), safe="~-._")
+
+
+def oauth1_header(method, url, consumer_key, consumer_secret, token, token_secret, params=None,
+                  nonce=None, timestamp=None):
+    """OAuth 1.0a HMAC-SHA1 Authorization header. JSON bodies are not part of the signature."""
+    oauth = {
+        "oauth_consumer_key": consumer_key,
+        "oauth_nonce": nonce or secrets.token_hex(16),
+        "oauth_signature_method": "HMAC-SHA1",
+        "oauth_timestamp": str(timestamp or int(time.time())),
+        "oauth_token": token,
+        "oauth_version": "1.0",
+    }
+    all_params = {**(params or {}), **oauth}
+    # Percent-encode keys and values, then sort the encoded pairs (RFC 5849 section 3.4.1.3.2).
+    param_str = "&".join(f"{k}={v}" for k, v in sorted((_pct(k), _pct(v)) for k, v in all_params.items()))
+    base = "&".join([method.upper(), _pct(url), _pct(param_str)])
+    key = f"{_pct(consumer_secret)}&{_pct(token_secret)}"
+    sig = base64.b64encode(hmac.new(key.encode(), base.encode(), hashlib.sha1).digest()).decode()
+    oauth["oauth_signature"] = sig
+    return "OAuth " + ", ".join(f'{_pct(k)}="{_pct(v)}"' for k, v in sorted(oauth.items()))
+
+
+def post_x(s, text):
+    auth = oauth1_header("POST", X_TWEET_URL, s.x_api_key, s.x_api_secret, s.x_access_token, s.x_access_secret)
+    r = http.post(X_TWEET_URL, headers={"Authorization": auth}, body={"text": text}, retries=1)
+    return (r or {}).get("data", {}).get("id", "")
+
+
+def post_telegram(s, html_text):
+    url = f"https://api.telegram.org/bot{s.telegram_bot_token}/sendMessage"
+    body = {"chat_id": s.telegram_channel, "text": html_text, "parse_mode": "HTML",
+            "disable_web_page_preview": True}
+    r = http.post(url, body=body)
+    return str(((r or {}).get("result") or {}).get("message_id", ""))
