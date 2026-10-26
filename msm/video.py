@@ -1,6 +1,6 @@
-"""Vertical TikTok videos (1080x1920) from the bot's real data, in the MYO style, with a voice-over.
+"""Vertical TikTok videos (1080x1920) from the bot's real data, in the $SM style, with a voice-over.
 
-Look: black, Apple-like, Inter Display, the MYO orb (navy -> sky blue). One scene per coin / trader,
+Look: black, Apple-like, Inter Display, the $SM logo. One scene per coin / trader,
 each as long as its narration (about 45-60 s in total).
 
 Needs Pillow and ffmpeg (installed by the GitHub workflow). The voice uses edge-tts (free neural voices);
@@ -28,7 +28,6 @@ TEXT = (245, 245, 247)         # #F5F5F7
 TEXT2 = (161, 161, 166)        # #A1A1A6
 GAIN = (50, 215, 75)           # #32D74B
 LOSS = (255, 69, 58)           # #FF453A
-ORB = [(0.0, (4, 11, 66)), (0.62, (43, 92, 158)), (1.0, (153, 204, 235))]  # #040B42 -> #2B5C9E -> #99CCEB
 MARGIN = 84
 VOICE = os.environ.get("MSM_VOICE", "en-US-AndrewNeural")
 VOICE_RATE = os.environ.get("MSM_VOICE_RATE", "+6%")
@@ -91,38 +90,31 @@ def ease(t):
 
 
 # ---------- drawing ----------
-def _mix(a, b, t):
-    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
-
-
-def _orb_color(f):
-    for (p0, c0), (p1, c1) in zip(ORB, ORB[1:]):
-        if f <= p1:
-            return _mix(c0, c1, (f - p0) / (p1 - p0))
-    return ORB[-1][1]
-
-
-def orb(d):
-    """The MYO orb: a radial gradient disc, dark navy centre to sky-blue edge (antialiased)."""
+def sm_logo(d):
+    """The $SM logo: off-white '$SM' on a near-black rounded tile, with a hairline so it reads on black."""
     from PIL import Image, ImageDraw
-    s = 3
-    big = Image.new("RGBA", (d * s, d * s), (0, 0, 0, 0))
-    dr = ImageDraw.Draw(big)
-    R = d * s / 2
-    steps = max(40, d)
-    for i in range(steps, 0, -1):
-        r = R * i / steps
-        dr.ellipse((R - r, R - r, R + r, R + r), fill=_orb_color(i / steps) + (255,))
-    return big.resize((d, d), Image.LANCZOS)
+    k = 3
+    D = d * k
+    img = Image.new("RGBA", (D, D), (0, 0, 0, 0))
+    dr = ImageDraw.Draw(img)
+    dr.rounded_rectangle((0, 0, D - 1, D - 1), radius=int(D * 0.22), fill=(17, 17, 17, 255),
+                         outline=(255, 255, 255, 38), width=max(2, int(D * 0.012)))
+    size = fit("$SM", DISPLAY, int(D * 0.6), D * 0.74, floor=8)
+    f = font(DISPLAY, size)
+    bbox = dr.textbbox((0, 0), "$SM", font=f)
+    x = (D - (bbox[2] - bbox[0])) / 2 - bbox[0]
+    y = (D - (bbox[3] - bbox[1])) / 2 - bbox[1]
+    dr.text((x, y), "$SM", font=f, fill=(244, 245, 240, 255))
+    return img.resize((d, d), Image.LANCZOS)
 
 
 def background():
-    """Black with a faint orb glow at the top (kept subtle: mostly black)."""
+    """Black with a faint neutral glow at the top."""
     from PIL import Image, ImageDraw, ImageFilter
     img = Image.new("RGB", (W, H), BG)
     glow = Image.new("RGB", (W, H), (0, 0, 0))
     d = ImageDraw.Draw(glow)
-    d.ellipse((W / 2 - 700, -900, W / 2 + 700, 380), fill=(18, 34, 70))
+    d.ellipse((W / 2 - 700, -900, W / 2 + 700, 380), fill=(30, 30, 33))
     glow = glow.filter(ImageFilter.GaussianBlur(220))
     img = Image.blend(img, glow, 0.85)
     noise = Image.effect_noise((W, H), 8).convert("RGB")
@@ -208,10 +200,10 @@ def chips(names, max_w=W - 2 * MARGIN, size=40):
 
 
 def brand():
-    """Small 'orb  MYO · Smart Money' mark used at the top of every frame."""
+    """Small '$SM  $SMART MONEY' mark used at the top of every frame."""
     from PIL import Image
-    o = orb(46)
-    t = text_img([[("MYO", TEXT), ("  ·  Smart Money", TEXT2)]], 36, SEMI)
+    o = sm_logo(64)
+    t = text_img([[("$SMART MONEY", TEXT)]], 36, DISPLAY)
     img = Image.new("RGBA", (o.width + 18 + t.width, max(o.height, t.height)), (0, 0, 0, 0))
     img.paste(o, (0, (img.height - o.height) // 2), o)
     img.paste(t, (o.width + 18, (img.height - t.height) // 2 + 2), t)
@@ -380,7 +372,7 @@ def hook_scene(line1, line2, sub, say):
     def els(t0, t_out):
         s = min(fit(line1, DISPLAY, 128, W - 2 * MARGIN), fit(line2, DISPLAY, 128, W - 2 * MARGIN))
         big = text_img([[(line1, TEXT)], [(line2, TEXT2)]], s, align="center")
-        o = orb(220)
+        o = sm_logo(220)
         y = H * 0.40 - big.height / 2
         subi = text_img([[(sub, TEXT2)]], fit(sub, MED, 40, W - 2 * MARGIN), MED, align="center")
         return [centered(o, y - 300, t0 + 0.05, t_out, dy=0, dur=0.7),
@@ -442,7 +434,7 @@ def summary_scene(title, items, say):
 
 def outro_scene(line, sub, say):
     def els(t0, t_out):
-        o = orb(260)
+        o = sm_logo(260)
         big = text_img([[(w, TEXT)] for w in wrap(line, DISPLAY, 96, W - 2 * MARGIN)], 96, align="center")
         y = H * 0.42
         out = [centered(o, y - 340, t0 + 0.05, t_out, dy=0, dur=0.7),
