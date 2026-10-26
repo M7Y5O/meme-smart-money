@@ -18,7 +18,7 @@ concurrency:
 jobs:
   tick:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -30,21 +30,21 @@ jobs:
           key: msm-state-${{ github.run_id }}
           restore-keys: msm-state-
 
-      # Video tools for the TikTok drafts (Pillow, ffmpeg, Inter font), installed once then cached.
+      # Video tools for the TikTok drafts (Pillow, ffmpeg, edge-tts voice, Inter fonts), installed once then cached.
       - name: Restore video tools
         id: tools
         uses: actions/cache@v4
         with:
           path: .tools
-          key: msm-tools-v1
+          key: msm-tools-v2
 
       - name: Install video tools (first run only)
         if: steps.tools.outputs.cache-hit != 'true'
         run: |
-          python3 -m pip install --quiet --target .tools/py pillow imageio-ffmpeg
+          python3 -m pip install --quiet --target .tools/py pillow imageio-ffmpeg edge-tts
           curl -sSL -o /tmp/inter.zip https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip
           mkdir -p .tools/fonts
-          unzip -q -j -o /tmp/inter.zip extras/ttf/Inter-Bold.ttf extras/ttf/Inter-SemiBold.ttf extras/ttf/Inter-Medium.ttf -d .tools/fonts
+          unzip -q -j -o /tmp/inter.zip 'extras/ttf/Inter-Bold.ttf' 'extras/ttf/Inter-SemiBold.ttf' 'extras/ttf/Inter-Medium.ttf' 'extras/ttf/InterDisplay-Bold.ttf' 'extras/ttf/InterDisplay-SemiBold.ttf' -d .tools/fonts
 
       - name: Run one cycle
         run: mkdir -p state && python3 -m msm ${{ inputs.command || 'tick' }}
