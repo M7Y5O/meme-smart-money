@@ -10,6 +10,7 @@
   python -m msm test-x-draft   # send a sample X post to X_DRAFTS_CHAT_ID
   python -m msm test-x        # post a test tweet (careful: it is public)
   python -m msm tiktok         # render today's TikTok videos (real data), send them to X_DRAFTS_CHAT_ID
+  python -m msm story          # storytelling video ("I tracked the best Fomo traders...") sent to X_DRAFTS_CHAT_ID
   python -m msm sync           # send the bot's activity to the dashboard database (DATABASE_URL) now
   python -m msm traders        # fetch and print today's top traders from the Fomo API
 """
@@ -88,6 +89,12 @@ def main(argv):
         print("recap video:", bot.tiktok_recap(rows, tokens))
         traders = sorted([t for t in bot.db.latest_traders() if t.get("pnl") is not None], key=lambda t: -t["pnl"])
         print("leaderboard video:", bot.tiktok_leaderboard(traders))
+    elif cmd == "story":  # storytelling video from the last days of real data, sent to X_DRAFTS_CHAT_ID
+        from . import story
+        bot.refresh_wallets()
+        bot.poll()
+        f = story.facts(bot)
+        print("story video:", bool(f) and bot.tiktok("story", lambda p: story.render(f, p), story.caption(f)))
     elif cmd == "sync":  # send activity to the dashboard database now
         from . import sync
         bot.refresh_wallets()
