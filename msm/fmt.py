@@ -90,22 +90,43 @@ def cluster_tg(c, token, window_h, labels, ref_link):
     return "\n".join(lines)
 
 
-def recap_x(rows, tokens, title="Smart-money recap, last 24h", n=3):
-    lines = [title, "", "Most bought by top traders:"]
-    for i, r in enumerate(rows[:n], 1):
-        w = len(r["wallets"])
-        lines.append(f"{i}. {ticker(tokens.get(r['mint']), r['mint'])}: {w} trader{'s' if w > 1 else ''}")
-    lines += ["", "Full list on Telegram (link in bio)", NFA]
-    return _fit("\n".join(lines))
+def buyer_names(r, labels, k=3):
+    """Labels of the tracked traders who bought this coin, e.g. ['pointfarmcap', 'frank', '+2']."""
+    names = sorted({(labels or {}).get(w, w[:6]) for w in r["wallets"]}, key=str.lower)
+    return names[:k] + ([f"+{len(names) - k}"] if len(names) > k else [])
 
 
-def recap_tg(rows, tokens, title, ref_link, n=10):
+def _clean(name):
+    return re.sub(r"[@\n]", "", name)[:18]
+
+
+def recap_x(rows, tokens, title="Smart-money recap, last 24h", n=3, labels=None):
+    def build(with_names):
+        lines = [title, "", "Most bought by top traders:"]
+        for i, r in enumerate(rows[:n], 1):
+            w = len(r["wallets"])
+            line = f"{i}. {ticker(tokens.get(r['mint']), r['mint'])}: {w} trader{'s' if w > 1 else ''}"
+            if with_names and labels:
+                line += " (" + ", ".join(_clean(x) for x in buyer_names(r, labels, with_names)) + ")"
+            lines.append(line)
+        lines += ["", "Full list on Telegram (link in bio)", NFA]
+        return "\n".join(lines)
+    for k in (3, 2, 1):  # as many buyer names as fit in 280 characters
+        text = build(k)
+        if x_len(text) <= X_LIMIT:
+            return text
+    return _fit(build(0))
+
+
+def recap_tg(rows, tokens, title, ref_link, n=10, labels=None):
     lines = [f"<b>{title}</b>", "", "Most bought by top traders:"]
     for i, r in enumerate(rows[:n], 1):
         t = tokens.get(r["mint"]) or {}
         w = len(r["wallets"])
         extra = f" · mcap {money(t.get('last_mcap'))}" if t.get("last_mcap") else ""
         lines.append(f"{i}. <b>{ticker(t, r['mint'])}</b>: {w} trader{'s' if w > 1 else ''}{extra}")
+        if labels:
+            lines.append("    ↳ " + ", ".join(html.escape(x) for x in buyer_names(r, labels, 4)))
     lines += [""] + receipts_tg("🧾 Score any Fomo trader:") if receipts_bot() else []
     if ref_link:
         lines += ["", f"Trade on Fomo: {ref_link}", "(affiliate link, I earn a commission)"]
