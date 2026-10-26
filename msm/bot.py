@@ -167,8 +167,8 @@ class Bot:
     def tiktok_recap(self, rows, tokens, period="last 24h"):
         now = self.clock()
         return self.tiktok("daily recap" if period == "last 24h" else "weekly recap",
-                           lambda p: video.render_recap(rows, tokens, p, now, period),
-                           video.recap_caption(rows, tokens, period))
+                           lambda p: video.render_recap(rows, tokens, p, now, period, labels=self.labels),
+                           video.recap_caption(rows, tokens, period, labels=self.labels))
 
     def tiktok_leaderboard(self, traders):
         now, period = self.clock(), self.s.pnl_period_label
@@ -216,8 +216,8 @@ class Bot:
         if not rows:
             log.info("recap: nothing to post")
             return False
-        self.publish("recap", fmt.recap_x(rows, tokens),
-                     fmt.recap_tg(rows, tokens, "Smart-money recap, last 24h", self.s.fomo_ref_link))
+        self.publish("recap", fmt.recap_x(rows, tokens, labels=self.labels),
+                     fmt.recap_tg(rows, tokens, "Smart-money recap, last 24h", self.s.fomo_ref_link, labels=self.labels))
         self.tiktok_recap(rows, tokens)
         return True
 
@@ -233,8 +233,9 @@ class Bot:
         if not rows:
             return False
         self.publish("weekly",
-                     fmt.recap_x(rows, tokens, title="This week: what smart money bought most", n=5),
-                     fmt.recap_tg(rows, tokens, "This week: what smart money bought most", self.s.fomo_ref_link))
+                     fmt.recap_x(rows, tokens, title="This week: what smart money bought most", n=5, labels=self.labels),
+                     fmt.recap_tg(rows, tokens, "This week: what smart money bought most", self.s.fomo_ref_link,
+                                  labels=self.labels))
         return True
 
     def post_pnl_leaderboard(self):
