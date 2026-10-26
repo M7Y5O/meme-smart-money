@@ -389,7 +389,7 @@ def _stack_top(heights, gaps, center=H * 0.47, top=320):
 def item_scene(rank, title, title_color, rows, names, names_label, say):
     """One coin / trader: rank, huge title, a data card and the trader chips (centred vertically)."""
     def els(t0, t_out):
-        r = text_img([[(f"No. {rank}", TEXT2)]], 44, SEMI)
+        r = text_img([[(f"No. {rank}" if isinstance(rank, int) else str(rank), TEXT2)]], 44, SEMI)
         big = text_img([[(title, title_color)]], fit(title, DISPLAY, 150, W - 2 * MARGIN, floor=70))
         card = tile(rows) if rows else None
         lab = text_img([[(names_label, TEXT2)]], 36, MED) if names else None
