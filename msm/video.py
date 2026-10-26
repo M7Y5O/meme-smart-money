@@ -260,13 +260,21 @@ def speak(text, path):
         import edge_tts
     except ImportError:
         return None
-    try:
-        asyncio.run(edge_tts.Communicate(text, VOICE, rate=VOICE_RATE).save(path))
-        d = _duration(path)
-        return d if d > 0.3 else None
-    except Exception as e:
-        log.warning("voice failed (video will be silent): %s", str(e)[:200])
-        return None
+    import time
+    err = None
+    for attempt in range(4):  # the free TTS service sometimes drops a request: retry, then try the default speed
+        try:
+            kw = {"rate": VOICE_RATE} if attempt < 2 else {}
+            asyncio.run(edge_tts.Communicate(text, VOICE, **kw).save(path))
+            d = _duration(path)
+            if d > 0.3:
+                return d
+            err = "empty audio"
+        except Exception as e:
+            err = str(e)[:160]
+        time.sleep(1.5 * (attempt + 1))
+    log.warning("voice failed for %r (scene stays silent): %s", text[:60], err)
+    return None
 
 
 def _estimate(text):
