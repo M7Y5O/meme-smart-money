@@ -137,3 +137,114 @@ def caption(f):
             f"Copying a buy isn't copying a strategy."
             + (f"\nCheck any trader's receipts: @{bot} on Telegram." if bot else "")
             + f"\nNot financial advice.\n\n{video.HASHTAGS} #storytime")
+
+
+# ---------- story 2: the $100 copy experiment ----------
+def copy_facts(bot, days=7, stake=100):
+    """What $stake on every coin a top trader bought (at the market cap when first spotted) is worth now."""
+    now = int(bot.clock())
+    buys = bot.db.buys_since(now - days * 86400)
+    groups = detect.group_by_mint(buys)
+    bot.refresh_tokens(list(groups))
+    coins = []
+    for mint, g in groups.items():
+        t = bot.db.get_token(mint) or {}
+        if t.get("first_mcap") and t.get("last_mcap"):
+            coins.append({"sym": fmt.ticker(t, mint), "mult": t["last_mcap"] / t["first_mcap"],
+                          "first_mcap": t["first_mcap"], "last_mcap": t["last_mcap"],
+                          "who": sorted({bot.labels.get(w, w[:6]) for w in g["wallets"]}, key=str.lower)})
+    if len(coins) < 8:
+        return None
+    coins.sort(key=lambda c: -c["mult"])
+    best, worst = coins[0], coins[-1]
+    if best["mult"] < 1.3 or worst["mult"] > 0.7:
+        return None
+    # the twist: traders whose own picks include both a big winner and a big loser
+    per = {}
+    for c in coins:
+        for name in c["who"]:
+            per.setdefault(name, []).append(c)
+    twins = []
+    for name, cs in per.items():
+        hi, lo = max(cs, key=lambda c: c["mult"]), min(cs, key=lambda c: c["mult"])
+        if hi["mult"] >= 1.3 and lo["mult"] <= 0.5:
+            twins.append({"name": name, "hi": hi, "lo": lo})
+    twins.sort(key=lambda x: -(x["hi"]["mult"] - x["lo"]["mult"]))
+    hours = (now - min(b["ts"] for b in buys)) / 3600
+    return {"stake": stake, "n": len(coins), "invested": stake * len(coins),
+            "value": sum(stake * c["mult"] for c in coins), "best": best, "worst": worst,
+            "halved": sum(1 for c in coins if c["mult"] < 0.5), "twins": twins[:2],
+            "period": f"{round(hours)} hours" if hours < 44 else f"{round(hours / 24)} days"}
+
+
+def _coin_scene(label, c, stake, say):
+    up = c["mult"] >= 1
+    col = GAIN if up else LOSS
+    card = [("Bought by", ", ".join(c["who"][:2]), None),
+            ("Market cap then", fmt.money(c["first_mcap"]), None),
+            ("Market cap now", fmt.money(c["last_mcap"]), col),
+            (f"${stake} became", fmt.money(stake * c["mult"]) if stake * c["mult"] >= 10 else f"${stake * c['mult']:.2f}", col)]
+    return video.item_scene(label, f"{c['sym']}  {_pct(c['mult'])}", TEXT, card, [], "", say)
+
+
+def copy_scenes(f):
+    s, M = f["stake"], fmt.money
+    best, worst = f["best"], f["worst"]
+    out = [statement([[("I copied every buy", TEXT)], [("of the top traders", TEXT)], [(f"with ${s}.", TEXT2)]],
+                     f"What if you copied every single buy of the top traders on Fomo, with {s} dollars each? "
+                     f"I tracked their wallets for {f['period']} to find out.",
+                     kicker="a $SMART MONEY experiment", min_dur=3.5),
+           statement([[(str(f["n"]), GAIN), (" coins.", TEXT)], [(M(f["invested"]), GAIN), (" in.", TEXT)]],
+                     f"That's {f['n']} coins. {video.spoken_money(f['invested'])} in.", min_dur=2.6),
+           _coin_scene("The best one", best, s,
+                       f"The best one: {video.spoken_ticker(best['sym'])}, bought by "
+                       f"{video.spoken_name(best['who'][0])}. It went up {round((best['mult'] - 1) * 100)} percent. "
+                       f"Your {s} dollars became {video.spoken_money(s * best['mult'])}."),
+           _coin_scene("The worst one", worst, s,
+                       f"The worst: {video.spoken_ticker(worst['sym'])}, bought by "
+                       f"{video.spoken_name(worst['who'][0])}. Down {round((1 - worst['mult']) * 100)} percent. "
+                       f"Your {s} dollars are now worth almost nothing.")]
+    if f["twins"]:
+        lines, said = [[("Same traders.", TEXT)]], []
+        for t in f["twins"]:
+            lines.append([(t["name"][:14] + "  ", TEXT2), (_pct(t["hi"]["mult"]), GAIN), ("  ", TEXT),
+                          (_pct(t["lo"]["mult"]), LOSS)])
+            said.append(f"{video.spoken_name(t['name'])} made {round((t['hi']['mult'] - 1) * 100)} percent "
+                        f"on {video.spoken_ticker(t['hi']['sym'])}, and lost "
+                        f"{round((1 - t['lo']['mult']) * 100)} percent on {video.spoken_ticker(t['lo']['sym'])}")
+        out.append(statement(lines, "Here's the twist. The best and the worst picks came from the same traders. "
+                             + ". ".join(said) + ".", size=96, min_dur=4.0))
+    pct = (f["value"] / f["invested"] - 1) * 100
+    out.append(statement([[(M(f["invested"]), TEXT), (" → ", TEXT2), (M(f["value"]), GAIN if pct >= 0 else LOSS)],
+                          [(f"{pct:+.0f}%", GAIN if pct >= 0 else LOSS)],
+                          [(f"{f['halved']} coins lost half.", TEXT2)]],
+                         f"Final result: {video.spoken_money(f['invested'])} became "
+                         f"{video.spoken_money(f['value'])}. That's {'up' if pct >= 0 else 'down'} "
+                         f"{abs(round(pct))} percent. And {f['halved']} coins lost more than half.",
+                         kicker="the result", min_dur=3.5))
+    out.append(statement([[("Top traders lose often.", TEXT)], [("They win big", TEXT)], [("on a few.", TEXT2)]],
+                         "Top traders lose often. They just win big on a few. "
+                         "Copy everything, and you get all of their losses too.", min_dur=3.5))
+    bot = fmt.receipts_bot()
+    out.append(video.outro_scene("Know who you copy.",
+                                 ["Win rate · hold time · skill or luck"] + ([f"@{bot} on Telegram"] if bot else []),
+                                 "So know who you copy. "
+                                 + ("Receipts on Telegram shows any Fomo trader's real win rate. " if bot else "")
+                                 + "Follow for smart money data every day. Not financial advice."))
+    return out
+
+
+def copy_render(f, out_path):
+    with tempfile.TemporaryDirectory() as wd:
+        return video.build(copy_scenes(f), out_path, wd)
+
+
+def copy_caption(f):
+    pct = (f["value"] / f["invested"] - 1) * 100
+    bot = fmt.receipts_bot()
+    return (f"I copied every buy of the top Fomo traders with ${f['stake']} 💸\n"
+            f"{f['n']} coins later: {fmt.money(f['invested'])} → {fmt.money(f['value'])} ({pct:+.0f}%).\n"
+            f"Best: {f['best']['sym']} {_pct(f['best']['mult'])}. Worst: {f['worst']['sym']} {_pct(f['worst']['mult'])}."
+            + (f"\nKnow who you copy: @{bot} on Telegram." if bot else "")
+            + f"\nNot financial advice. Paper experiment, market caps when first spotted vs now."
+            + f"\n\n{video.HASHTAGS} #storytime #copytrading")
