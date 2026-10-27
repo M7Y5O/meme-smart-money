@@ -275,6 +275,8 @@ def _estimate(text):
 
 def spoken_money(x):
     x = abs(float(x or 0))
+    if x < 10000:  # "5800 dollars" reads better than "5.8 thousand dollars"
+        return f"{x:.0f} dollars"
     for div, word in ((1e9, "billion"), (1e6, "million"), (1e3, "thousand")):
         if x >= div:
             v = x / div
