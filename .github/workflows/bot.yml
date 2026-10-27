@@ -9,7 +9,7 @@ on:
         description: "What to run"
         type: choice
         default: tick
-        options: [tick, sync, tiktok, story, check-telegram, telegram-chats, test-x-draft, test-telegram, test-x]
+        options: [tick, sync, tiktok, story, story-copy, check-telegram, telegram-chats, test-x-draft, test-telegram, test-x]
 
 concurrency:
   group: smart-money-bot
