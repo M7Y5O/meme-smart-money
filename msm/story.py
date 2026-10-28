@@ -248,3 +248,124 @@ def copy_caption(f):
             + (f"\nKnow who you copy: @{bot} on Telegram." if bot else "")
             + f"\nNot financial advice. Paper experiment, market caps when first spotted vs now."
             + f"\n\n{video.HASHTAGS} #storytime #copytrading")
+
+
+# ---------- story 3: three styles ----------
+def styles_facts(bot, days=7, min_usd=5000):
+    """Three top traders with opposite styles: all-in on one buy, stacking one coin, shotgun across many."""
+    now = int(bot.clock())
+    buys = [b for b in bot.db.buys_since(now - days * 86400) if (b.get("usd_spent") or 0) > 0]
+    if not buys:
+        return None
+    by = {}
+    for b in buys:
+        by.setdefault(b["wallet"], []).append(b)
+    mints = sorted({b["mint"] for b in buys})
+    bot.refresh_tokens(mints)
+    toks = {m: bot.db.get_token(m) or {} for m in mints}
+    board = {t["address"]: t for t in bot.db.latest_traders()}
+    people = []
+    for w, bs in by.items():
+        usd = sum(b["usd_spent"] for b in bs)
+        if usd < min_usd:
+            continue
+        per = {}
+        for b in bs:
+            per[b["mint"]] = per.get(b["mint"], 0) + b["usd_spent"]
+        now_val = 0
+        for m, u in per.items():
+            t = toks[m]
+            mult = t["last_mcap"] / t["first_mcap"] if t.get("first_mcap") and t.get("last_mcap") else 1
+            now_val += u * mult
+        top = sorted(per, key=lambda m: -per[m])
+        people.append({"name": bot.labels.get(w, w[:6]), "buys": len(bs), "coins": len(per), "usd": usd,
+                       "biggest": max(b["usd_spent"] for b in bs), "value": now_val,
+                       "syms": [fmt.ticker(toks[m], m) for m in top[:6]],
+                       "pnl": (board.get(w) or {}).get("pnl"), "rank": (board.get(w) or {}).get("rank")})
+    pick, used = [], set()
+
+    def take(style, cands, key):
+        cands = [p for p in cands if p["name"] not in used]
+        if cands:
+            p = max(cands, key=key)
+            used.add(p["name"])
+            pick.append(dict(p, style=style))
+    take("The all-in", [p for p in people if p["coins"] == 1 and p["biggest"] >= 0.7 * p["usd"]], lambda p: p["usd"])
+    take("The stacker", [p for p in people if p["coins"] == 1 and p["buys"] >= 5], lambda p: p["usd"])
+    take("The shotgun", [p for p in people if p["coins"] >= 8], lambda p: p["coins"])
+    if len(pick) < 2:
+        return None
+    hours = (now - min(b["ts"] for b in buys)) / 3600
+    return {"people": pick, "period": f"{round(hours)} hours" if hours < 44 else f"{round(hours / 24)} days"}
+
+
+def _style_say(p):
+    name, M = video.spoken_name(p["name"]), video.spoken_money
+    if p["style"] == "The all-in":
+        s = (f"The all-in. {name} put {M(p['usd'])} into one single coin, {video.spoken_ticker(p['syms'][0])}. "
+             f"The biggest buy alone: {M(p['biggest'])}.")
+    elif p["style"] == "The stacker":
+        s = (f"The stacker. {name} bought the same coin, {video.spoken_ticker(p['syms'][0])}, {p['buys']} times. "
+             f"{M(p['usd'])} in total, about {M(round(p['usd'] / p['buys'], -2))} each time.")
+    else:
+        s = (f"The shotgun. {name} made {p['buys']} buys across {p['coins']} different coins. "
+             f"{M(p['usd'])} spread everywhere.")
+    pct = (p["value"] / p["usd"] - 1) * 100
+    if abs(pct) >= 3:
+        s += f" On paper, it's {'up' if pct > 0 else 'down'} {abs(round(pct))} percent since."
+    return s
+
+
+def styles_scenes(f):
+    M = fmt.money
+    n = len(f["people"])
+    out = [statement([[(f"{n} top traders.", TEXT)], [(f"{n} opposite", TEXT2)], [("strategies.", TEXT2)]],
+                     f"{n} traders from the top of the Fomo leaderboard. {n} completely opposite ways to trade "
+                     f"memecoins. I tracked their wallets for {f['period']}.",
+                     kicker="a $SMART MONEY story", min_dur=3.5)]
+    for p in f["people"]:
+        pct = (p["value"] / p["usd"] - 1) * 100
+        col = GAIN if pct >= 0 else LOSS
+        card = [("Buys", str(p["buys"]), None), ("Coins", str(p["coins"]), None),
+                ("Total bet", M(p["usd"]), None), ("Biggest buy", M(p["biggest"]), None),
+                ("Since they bought", f"{pct:+.0f}%", col)]
+        out.append(video.item_scene(p["style"], p["name"][:20], TEXT, card, p["syms"],
+                                    "Coins" if p["coins"] > 1 else "Coin", _style_say(p)))
+    ranked = [p for p in f["people"] if p.get("pnl")]
+    if ranked:
+        items = [((f"#{p['rank']} " if p.get("rank") else "") + p["name"][:16], fmt.signed_money(p["pnl"]),
+                  GAIN if p["pnl"] >= 0 else LOSS) for p in ranked]
+        all_up = all(p["pnl"] > 0 for p in ranked)
+        out.append(video.summary_scene("Same leaderboard.", items,
+                                        "And here's the thing. " + ("All of them are in profit on the leaderboard. "
+                                        if all_up else "They're all on the leaderboard. ")
+                                        + "Opposite strategies. Same result."))
+    shot = next((p for p in f["people"] if p["style"] == "The shotgun"), None)
+    out.append(statement([[("One buy alert", TEXT)], [("doesn't tell you", TEXT)], [("which game they play.", TEXT2)]],
+                         "So when you see one of them buy, you don't know if it's a giant conviction bet, "
+                         f"or one lottery ticket out of {shot['buys'] if shot else 'fifty'}. "
+                         "Copy the wrong style, and you take the wrong risk.",
+                         min_dur=3.5))
+    bot = fmt.receipts_bot()
+    out.append(video.outro_scene("Know their style.",
+                                 ["Bet size · hold time · win rate"] + ([f"@{bot} on Telegram"] if bot else []),
+                                 "So know their style before you copy. "
+                                 + ("Receipts on Telegram shows how any Fomo trader really plays. " if bot else "")
+                                 + "Follow for smart money data every day. Not financial advice."))
+    return out
+
+
+def styles_render(f, out_path):
+    with tempfile.TemporaryDirectory() as wd:
+        return video.build(styles_scenes(f), out_path, wd)
+
+
+def styles_caption(f):
+    bot = fmt.receipts_bot()
+    lines = [f"{p['style']}: {p['name']} ({p['buys']} buys, {p['coins']} coin{'s' if p['coins'] > 1 else ''}, "
+             f"{fmt.money(p['usd'])})" for p in f["people"]]
+    return (f"{len(f['people'])} top Fomo traders, {len(f['people'])} opposite strategies 🧠\n" + "\n".join(lines)
+            + "\nOne buy alert doesn't tell you which game they play."
+            + (f"\nKnow their style: @{bot} on Telegram." if bot else "")
+            + "\nNot financial advice. Paper values: market caps when first spotted vs now."
+            + f"\n\n{video.HASHTAGS} #storytime #tradingstrategy")
