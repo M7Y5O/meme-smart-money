@@ -13,6 +13,7 @@
   python -m msm story          # storytelling video ("I tracked the best Fomo traders...") sent to X_DRAFTS_CHAT_ID
   python -m msm story-copy     # storytelling video ("I copied every buy of the top traders with $100")
   python -m msm story-styles   # storytelling video ("3 top traders, 3 opposite strategies")
+  python -m msm story-timing   # storytelling video ("When does smart money buy?")
   python -m msm sync           # send the bot's activity to the dashboard database (DATABASE_URL) now
   python -m msm traders        # fetch and print today's top traders from the Fomo API
 """
@@ -111,6 +112,13 @@ def main(argv):
         f = story.styles_facts(bot)
         print("story video:", bool(f) and bot.tiktok("story styles", lambda p: story.styles_render(f, p),
                                                        story.styles_caption(f)))
+    elif cmd == "story-timing":  # storytelling video: "When does smart money buy?"
+        from . import story
+        bot.refresh_wallets()
+        bot.poll()
+        f = story.timing_facts(bot)
+        print("story video:", bool(f) and bot.tiktok("story timing", lambda p: story.timing_render(f, p),
+                                                       story.timing_caption(f)))
     elif cmd == "sync":  # send activity to the dashboard database now
         from . import sync
         bot.refresh_wallets()
