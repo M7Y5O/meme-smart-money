@@ -369,3 +369,116 @@ def styles_caption(f):
             + (f"\nKnow their style: @{bot} on Telegram." if bot else "")
             + "\nNot financial advice. Paper values: market caps when first spotted vs now."
             + f"\n\n{video.HASHTAGS} #storytime #tradingstrategy")
+
+
+# ---------- story 4: when smart money buys ----------
+def _hour_label(h):
+    return {0: "midnight", 12: "noon"}.get(h, f"{h % 12}{'am' if h < 12 else 'pm'}")
+
+
+def timing_facts(bot, days=7, window=4):
+    """Money spent by the top traders per hour of the day, New York time."""
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+    et = ZoneInfo("America/New_York")
+    now = int(bot.clock())
+    buys = [b for b in bot.db.buys_since(now - days * 86400) if (b.get("usd_spent") or 0) >= 5]
+    if len(buys) < 50:
+        return None
+    usd = [0.0] * 24
+    for b in buys:
+        usd[dt.datetime.fromtimestamp(b["ts"], et).hour] += b["usd_spent"]
+    total = sum(usd)
+    start = max(range(24), key=lambda h: sum(usd[(h + i) % 24] for i in range(window)))
+    win = sum(usd[(start + i) % 24] for i in range(window))
+    night = sum(usd[0:8])
+    peak = max(range(24), key=lambda h: usd[h])
+    hours = (now - min(b["ts"] for b in buys)) / 3600
+    return {"usd": usd, "total": total, "buys": len(buys), "start": start, "window": window,
+            "win_share": win / total, "night_share": night / total, "peak": peak, "peak_usd": usd[peak],
+            "period": f"{round(hours)} hours" if hours < 44 else f"{round(hours / 24)} days",
+            "channel": (bot.s.telegram_channel or "").strip()}
+
+
+def hour_chart(f):
+    """24 bars of money spent per hour; the busiest window in green."""
+    from PIL import Image, ImageDraw
+    cw, ch = W - 2 * MARGIN, 760
+    img = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((0, 0, cw - 1, ch - 1), radius=44, fill=video.TILE + (255,))
+    pad, top, bottom = 48, 60, 110
+    bw = (cw - 2 * pad) / 24
+    mx = max(f["usd"]) or 1
+    inwin = {(f["start"] + i) % 24 for i in range(f["window"])}
+    for h, v in enumerate(f["usd"]):
+        bh = max(6, (ch - top - bottom) * v / mx)
+        x0 = pad + h * bw + bw * 0.16
+        col = GAIN if h in inwin else (70, 70, 74)
+        d.rounded_rectangle((x0, ch - bottom - bh, x0 + bw * 0.68, ch - bottom), radius=int(bw * 0.2), fill=col + (255,))
+    fl = video.font(MED, 30)
+    for h in (0, 6, 12, 18):
+        lab = _hour_label(h)
+        d.text((pad + h * bw, ch - bottom + 28), lab, font=fl, fill=TEXT2 + (255,))
+    return img
+
+
+def chart_scene(f, say):
+    def els(t0, t_out):
+        head = text_img([[("Money spent, by hour", TEXT)]], fit("Money spent, by hour", DISPLAY, 80, W - 2 * MARGIN))
+        sub = text_img([[("New York time · " + f["period"], TEXT2)]], 38, MED)
+        chart = hour_chart(f)
+        y = video._stack_top([head.height, sub.height, chart.height], [16, 50])
+        return [El(head, MARGIN, y, t0 + 0.05, t_out),
+                El(sub, MARGIN, y + head.height + 16, t0 + 0.2, t_out, dy=0),
+                El(chart, MARGIN, y + head.height + 16 + sub.height + 50, t0 + 0.4, t_out, dy=60, dur=0.7)]
+    return {"say": say, "els": els, "min": 4.5}
+
+
+def timing_scenes(f):
+    M = fmt.money
+    s, e = _hour_label(f["start"]), _hour_label((f["start"] + f["window"]) % 24)
+    win, night = round(f["win_share"] * 100), round(f["night_share"] * 100)
+    out = [statement([[("When does", TEXT)], [("smart money", TEXT)], [("buy?", TEXT2)]],
+                     f"When do the best memecoin traders on Fomo actually buy? I logged every buy for "
+                     f"{f['period']}. {f['buys']} buys. {video.spoken_money(f['total'])}.",
+                     kicker="a $SMART MONEY story", min_dur=3.5),
+           chart_scene(f, "Here's every dollar they spent, hour by hour, New York time."),
+           statement([[(f"{s} to {e}:", TEXT)], [(f"{win}%", GAIN), (" of the money.", TEXT)]],
+                     f"Between {s} and {e}, they spent {win} percent of all their money. "
+                     f"In just {f['window']} hours.", kicker="the window"),
+           statement([[("Midnight to 8am:", TEXT)], [("only ", TEXT2), (f"{night}%", LOSS), (".", TEXT2)]],
+                     f"From midnight to 8am? Only {night} percent. Smart money sleeps too."),
+           statement([[("Biggest hour: ", TEXT2), (_hour_label(f["peak"]), TEXT)],
+                      [(M(f["peak_usd"]), GAIN), (" in one hour.", TEXT)]],
+                     f"The single biggest hour: {_hour_label(f['peak'])}. "
+                     f"{video.spoken_money(f['peak_usd'])} in sixty minutes."),
+           statement([[("The money moves", TEXT)], [("while you're", TEXT)], [("at work.", TEXT2)]],
+                     "The biggest moves happen in the middle of the day. When most people are at work, "
+                     "and can't watch the charts.", min_dur=3.5)]
+    ch = f["channel"]
+    bot = fmt.receipts_bot()
+    out.append(video.outro_scene("Get the alerts.",
+                                 ["Live smart-money alerts" + (f": {ch}" if ch else "")]
+                                 + ([f"Check any trader: @{bot}"] if bot else []),
+                                 "That's why the bot watches for you. Get the live alerts on our Telegram, link in "
+                                 "bio. " + ("And check any trader with Receipts. " if bot else "")
+                                 + "Not financial advice."))
+    return out
+
+
+def timing_render(f, out_path):
+    with tempfile.TemporaryDirectory() as wd:
+        return video.build(timing_scenes(f), out_path, wd)
+
+
+def timing_caption(f):
+    s, e = _hour_label(f["start"]), _hour_label((f["start"] + f["window"]) % 24)
+    ch = f["channel"]
+    return (f"When does smart money buy? ⏰\n"
+            f"{s}–{e} New York time: {round(f['win_share'] * 100)}% of the money. "
+            f"Midnight–8am: {round(f['night_share'] * 100)}%.\n"
+            f"{f['buys']} buys from the top Fomo traders over {f['period']}."
+            + (f"\nLive alerts: {ch} on Telegram." if ch else "")
+            + "\nNot financial advice."
+            + f"\n\n{video.HASHTAGS} #storytime #daytrading")
