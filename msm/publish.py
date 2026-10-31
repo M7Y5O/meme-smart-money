@@ -57,6 +57,31 @@ def send_x_draft(s, kind, text):
     return post_telegram(s, msg, chat_id=s.x_drafts_chat)
 
 
+def _multipart_upload(s, method, field, chat_id, path, caption_html, mime, extra=None, timeout=120):
+    import os
+    import uuid
+    boundary = uuid.uuid4().hex
+    fields = {"chat_id": str(chat_id), "caption": caption_html, "parse_mode": "HTML", **(extra or {})}
+    parts = [f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
+             for k, v in fields.items()]
+    with open(path, "rb") as f:
+        data = f.read()
+    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{field}"; filename="{os.path.basename(path)}"\r\n'
+                 f'Content-Type: {mime}\r\n\r\n'.encode() + data + b"\r\n")
+    parts.append(f"--{boundary}--\r\n".encode())
+    url = f"https://api.telegram.org/bot{s.telegram_bot_token}/{method}"
+    r = http.post(url, headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+                  body=b"".join(parts), timeout=timeout)
+    return str(((r or {}).get("result") or {}).get("message_id", ""))
+
+
+def send_x_photo_draft(s, kind, text, path):
+    """X post + its image card, sent to your private Telegram chat: save the image, copy the text."""
+    import html
+    cap = f"\U0001F4DD <b>X post to publish</b> ({html.escape(kind)}), with this image\n\n<pre>{html.escape(text)}</pre>"
+    return _multipart_upload(s, "sendPhoto", "photo", s.x_drafts_chat, path, cap[:1024], "image/png")
+
+
 def send_video(s, chat_id, path, caption_html):
     """Upload a video to a Telegram chat (multipart/form-data, stdlib only)."""
     import os
