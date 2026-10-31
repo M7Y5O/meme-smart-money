@@ -129,8 +129,14 @@ class Bot:
             return
         if x_text and self.s.x_drafts_chat and self.s.telegram_bot_token:
             try:
-                img = self._card(card)
-                mid = self.send_x_photo(kind, x_text, img) if img else self.send_x_draft(kind, x_text)
+                img, mid = self._card(card), None
+                if img:
+                    try:
+                        mid = self.send_x_photo(kind, x_text, img)
+                    except Exception as e:  # never lose the draft because of the image
+                        log.warning("photo draft failed, sending text: %s", e)
+                if not mid:
+                    mid = self.send_x_draft(kind, x_text)
                 self.db.log_post(kind, "x_draft", x_text, True, mid, ts=self.clock())
             except Exception as e:
                 log.error("X draft to Telegram failed: %s", e)
