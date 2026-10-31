@@ -206,6 +206,24 @@ class BotFlowTest(unittest.TestCase):
         self.assertTrue(self.bot.maybe_recap(force=True))
         self.assertIn("1. $PEPE: 2 traders", self.x[0])
 
+    def test_alert_receipts(self):
+        self.now += 60
+        for i, w in enumerate((W1, W2, W3)):
+            self.txs[w] = [swap_tx(f"s{i}", w, COIN, self.now - 30 + i)]
+        self.bot.poll()
+        self.assertEqual(self.bot.check_clusters(), 1)
+        self.assertEqual(len(self.bot.db.marks_since(0)), 1)  # market cap at alert saved
+        self.bot.market = lambda mints: {m: {"symbol": "PEPE", "mcap": 200000, "liquidity": 90000} for m in mints}
+        self.now += 3 * 86400
+        self.assertTrue(self.bot.post_receipts())
+        self.assertIn("$PEPE -50%", self.x[-1])
+        self.assertIn("1 alerts: 0 up, 1 down", self.x[-1])
+        self.assertLessEqual(fmt.x_len(self.x[-1]), 280)
+        self.assertIn("$400K", self.tg[-1])
+
+    def test_no_receipts_without_alerts(self):
+        self.assertFalse(self.bot.post_receipts())
+
 
 class LeaderboardTests(unittest.TestCase):
     PAYLOAD = {"data": {"traders": [
