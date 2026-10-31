@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS tokens (
   mint TEXT PRIMARY KEY, symbol TEXT, name TEXT, first_seen_ts INTEGER,
   first_mcap REAL, last_mcap REAL, liquidity REAL, url TEXT, updated_ts INTEGER);
 CREATE TABLE IF NOT EXISTS alerts (mint TEXT, kind TEXT, ts INTEGER);
+CREATE TABLE IF NOT EXISTS alert_marks (mint TEXT, ts INTEGER, mcap REAL, symbol TEXT, wallets INTEGER);
 CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT, channel TEXT,
   text TEXT, ts INTEGER, ok INTEGER, ref TEXT);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -86,6 +87,15 @@ class DB:
     def add_alert(self, mint, kind, ts=None):
         self.c.execute("INSERT INTO alerts(mint,kind,ts) VALUES(?,?,?)", (mint, kind, int(ts or time.time())))
         self.c.commit()
+
+    def add_mark(self, mint, ts, mcap, symbol, wallets):
+        """Market cap at the moment an alert went out, so its result can be shown later."""
+        self.c.execute("INSERT INTO alert_marks(mint,ts,mcap,symbol,wallets) VALUES(?,?,?,?,?)",
+                       (mint, int(ts), mcap, symbol, wallets))
+        self.c.commit()
+
+    def marks_since(self, ts):
+        return [dict(r) for r in self.c.execute("SELECT * FROM alert_marks WHERE ts>=? ORDER BY ts", (ts,))]
 
     def log_post(self, kind, channel, text, ok, ref="", ts=None):
         self.c.execute("INSERT INTO posts(kind,channel,text,ts,ok,ref) VALUES(?,?,?,?,?,?)",
