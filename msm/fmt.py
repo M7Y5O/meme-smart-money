@@ -163,3 +163,36 @@ def leaderboard_tg(traders, period, ref_link, n=10):
         lines += ["", f"Trade on Fomo: {ref_link}", "(affiliate link, I earn a commission)"]
     lines += ["", NFA + " Past results don't predict future ones."]
     return "\n".join(lines)
+
+
+def _rx_line(it):
+    pct = (it["mult"] - 1) * 100
+    return f"{'✅' if pct >= 0 else '❌'} {it['sym']} {pct:+.0f}%"
+
+
+def scorecard_x(items, stats):
+    """Weekly scorecard of our own alerts, wins and losses (X, <= 280)."""
+    head = [f"🧾 Our alert receipts, last 7 days", "",
+            f"{stats['n']} alerts: {stats['up']} up, {stats['n'] - stats['up']} down", ""]
+    tail = ["", "Market cap at alert vs now. Wins AND losses.", NFA]
+    lines = [_rx_line(i) for i in items]
+    for k in range(len(lines), 0, -1):  # as many lines as fit; when cut, keep the best AND the worst
+        shown = lines if k == len(lines) else lines[:(k + 1) // 2] + ["…"] + lines[len(lines) - k // 2:]
+        text = "\n".join(head + shown + tail)
+        if x_len(text) <= X_LIMIT:
+            return text
+    return _fit("\n".join(head + tail))
+
+
+def scorecard_tg(items, stats, ref_link):
+    lines = ["🧾 <b>Our alert receipts, last 7 days</b>", "",
+             f"{stats['n']} cluster alerts: <b>{stats['up']} up</b>, <b>{stats['n'] - stats['up']} down</b>",
+             "Market cap at the moment of the alert vs now:", ""]
+    for it in items:
+        lines.append(f"{_rx_line(it)}  ({money(it['at'])} → {money(it['now'])})")
+    lines += ["", "We show every alert, wins and losses. A buy by smart money is not a signal to copy blindly."]
+    lines += [""] + receipts_tg("🧾 Score the traders behind them:") if receipts_bot() else []
+    if ref_link:
+        lines += ["", f"Trade on Fomo: {ref_link}", "(affiliate link, I earn a commission)"]
+    lines += ["", NFA]
+    return "\n".join(lines)
