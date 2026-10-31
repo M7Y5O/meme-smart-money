@@ -4,6 +4,7 @@ Every number comes from the buys the bot recorded and live market caps. Beats ar
 doesn't support them (no losing cluster, no top trader...). Renders with the same look and voice as video.py.
 """
 import logging
+import os
 import tempfile
 
 from . import detect, fmt, video
@@ -482,3 +483,64 @@ def timing_caption(f):
             + (f"\nLive alerts: {ch} on Telegram." if ch else "")
             + "\nNot financial advice."
             + f"\n\n{video.HASHTAGS} #storytime #daytrading")
+
+
+# ---------- story 5: how to check a memecoin (educational, no data needed) ----------
+CHECKS = [
+    ("Mint & freeze", [("Safe", "Both revoked", GAIN), ("Red flag", "Still active", LOSS),
+                       ("Why", "Dev can print or freeze", None)],
+     "Check one: mint and freeze authority. Both should be revoked. If they're still active, the dev can print "
+     "new tokens, or freeze your wallet."),
+    ("Liquidity pool", [("Safe", "Burned or locked", GAIN), ("Red flag", "Unlocked", LOSS),
+                        ("Why", "Dev can pull it", None)],
+     "Check two: the liquidity pool. It should be burned or locked. If it's unlocked, the dev can pull it "
+     "and walk away with the money."),
+    ("Exit size", [("Safe", "Deep enough to sell", GAIN), ("Red flag", "$500K mcap, $10K liq", LOSS),
+                   ("Why", "You can't get out", None)],
+     "Check three: can you actually get out? A five hundred thousand dollar market cap with ten thousand "
+     "dollars of liquidity means you can't sell without crashing it."),
+    ("Top holders", [("Safe", "Spread out", GAIN), ("Red flag", "Top 10 own 30%+", LOSS),
+                     ("Why", "One dump ends it", None)],
+     "Check four: the top holders. If ten wallets own a third of the supply, one dump ends the party."),
+    ("Dev & snipers", [("Safe", "Dev holds little", GAIN), ("Red flag", "Bundled wallets", LOSS),
+                       ("Why", "Same person, ready to sell", None)],
+     "Check five: the dev and the snipers. Wallets that all bought in the same second are usually one person, "
+     "waiting to sell to you."),
+    ("Who's buying", [("Safe", "Proven traders", GAIN), ("Red flag", "Only fresh wallets", LOSS),
+                      ("Why", "No next buyer", None)],
+     "Check six: who's buying? Proven traders, or only brand new wallets? Without real buyers, there's no one "
+     "to sell to after you."),
+]
+
+
+def check_scenes():
+    n = len(CHECKS)
+    out = [statement([[("How to check", TEXT)], [("a memecoin", TEXT)], [("in 60 seconds.", TEXT2)]],
+                     f"Before you buy any memecoin, run these {n} checks. It takes sixty seconds, "
+                     "and it can save your whole bag.", kicker="a $SMART MONEY guide", min_dur=3.5)]
+    for i, (title, rows, say) in enumerate(CHECKS, 1):
+        out.append(video.item_scene(f"Check {i}/{n}", title, TEXT, rows, [], "", say))
+    out.append(statement([[(f"Pass all {n}?", TEXT)], [("Still not a buy.", TEXT)], [("Most go to zero.", TEXT2)]],
+                         f"Passed all {n}? It's still not a buy. Most memecoins go to zero. "
+                         "These checks just keep you out of the obvious traps.", min_dur=3.5))
+    ch = os.environ.get("TELEGRAM_CHANNEL", "").strip()
+    bot = fmt.receipts_bot()
+    out.append(video.outro_scene("Check who's buying.",
+                                 ([f"Live smart-money alerts: {ch}"] if ch else [])
+                                 + ([f"Check any trader: @{bot}"] if bot else []),
+                                 "The easiest check? See who's buying. Our bot tracks the best traders on Fomo, "
+                                 "live, on Telegram. Link in bio. Not financial advice."))
+    return out
+
+
+def check_render(out_path):
+    with tempfile.TemporaryDirectory() as wd:
+        return video.build(check_scenes(), out_path, wd)
+
+
+def check_caption():
+    return ("How to check a memecoin in 60 seconds ✅\n"
+            "1. Mint & freeze revoked\n2. Liquidity burned or locked\n3. Enough liquidity to exit\n"
+            "4. Top holders spread out\n5. No bundled dev/sniper wallets\n6. Real traders buying\n"
+            "Save this for your next trade.\nNot financial advice. Most memecoins go to zero."
+            f"\n\n{video.HASHTAGS} #rugpull #memecointips")
