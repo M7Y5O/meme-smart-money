@@ -6,7 +6,7 @@ import tempfile
 import time
 from zoneinfo import ZoneInfo
 
-from . import detect, fmt, leaderboard, publish, sources, sync, video
+from . import cards, detect, fmt, leaderboard, publish, sources, sync, video
 
 ET = ZoneInfo("America/New_York")
 log = logging.getLogger("msm")
@@ -25,6 +25,7 @@ class Bot:
         self.post_x = post_x or (lambda text: publish.post_x(settings, text))
         self.post_tg = post_tg or (lambda html: publish.post_telegram(settings, html))
         self.send_x_draft = lambda kind, text: publish.send_x_draft(settings, kind, text)
+        self.send_x_photo = lambda kind, text, path: publish.send_x_photo_draft(settings, kind, text, path)
         self.send_tiktok = lambda kind, path, caption: publish.send_tiktok_draft(settings, kind, path, caption)
         self.make_videos = video.available()
         self.clock = clock or time.time
@@ -110,7 +111,17 @@ class Bot:
         now = dt.datetime.fromtimestamp(self.clock(), ET)
         return int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
 
-    def publish(self, kind, x_text, tg_html, ref=""):
+    def _card(self, card):
+        """Render an image card for the X draft; None if images aren't available or it fails."""
+        if not card or not self.make_videos:
+            return None
+        try:
+            return card()
+        except Exception as e:
+            log.warning("card failed (draft goes out as text): %s", e)
+            return None
+
+    def publish(self, kind, x_text, tg_html, ref="", card=None):
         if self.s.dry_run:
             print(f"\n----- [DRY RUN] {kind} -> X ({fmt.x_len(x_text)} chars) -----\n{x_text}")
             print(f"----- [DRY RUN] {kind} -> Telegram -----\n{tg_html}\n")
@@ -118,7 +129,8 @@ class Bot:
             return
         if x_text and self.s.x_drafts_chat and self.s.telegram_bot_token:
             try:
-                mid = self.send_x_draft(kind, x_text)
+                img = self._card(card)
+                mid = self.send_x_photo(kind, x_text, img) if img else self.send_x_draft(kind, x_text)
                 self.db.log_post(kind, "x_draft", x_text, True, mid, ts=self.clock())
             except Exception as e:
                 log.error("X draft to Telegram failed: %s", e)
@@ -194,8 +206,12 @@ class Bot:
             self.publish("cluster",
                          fmt.cluster_x(c, tok, self.s.cluster_window_hours),
                          fmt.cluster_tg(c, tok, self.s.cluster_window_hours, labels, self.s.fomo_ref_link),
-                         c["mint"])
+                         c["mint"],
+                         card=lambda: cards.cluster(c, tok, self.s.cluster_window_hours, labels))
             self.db.add_alert(c["mint"], "cluster", self.clock())
+            if tok.get("last_mcap"):
+                self.db.add_mark(c["mint"], self.clock(), tok["last_mcap"], fmt.ticker(tok, c["mint"]),
+                                 len(c["wallets"]))
             posted += 1
         return posted
 
@@ -217,7 +233,8 @@ class Bot:
             log.info("recap: nothing to post")
             return False
         self.publish("recap", fmt.recap_x(rows, tokens, labels=self.labels),
-                     fmt.recap_tg(rows, tokens, "Smart-money recap, last 24h", self.s.fomo_ref_link, labels=self.labels))
+                     fmt.recap_tg(rows, tokens, "Smart-money recap, last 24h", self.s.fomo_ref_link, labels=self.labels),
+                     card=lambda: cards.recap(rows, tokens, self.labels))
         self.tiktok_recap(rows, tokens)
         return True
 
@@ -229,6 +246,7 @@ class Bot:
             return False
         self.db.set_meta("last_weekly", today)
         self.post_pnl_leaderboard()
+        self.post_receipts()
         rows, tokens = self._ranked(int(self.clock()) - 7 * 24 * 3600, 10)
         if not rows:
             return False
@@ -238,13 +256,41 @@ class Bot:
                                   labels=self.labels))
         return True
 
+    def receipts_data(self, days=7):
+        """Every cluster alert of the last days: market cap at the alert vs now. Wins and losses."""
+        marks = self.db.marks_since(int(self.clock()) - days * 86400)
+        if not marks:
+            return [], None
+        self.refresh_tokens(sorted({m["mint"] for m in marks}))
+        items = []
+        for m in marks:
+            t = self.db.get_token(m["mint"]) or {}
+            if m["mcap"] and t.get("last_mcap"):
+                items.append({"sym": m["symbol"] or fmt.ticker(t, m["mint"]), "at": m["mcap"],
+                              "now": t["last_mcap"], "mult": t["last_mcap"] / m["mcap"], "ts": m["ts"]})
+        if not items:
+            return [], None
+        items.sort(key=lambda i: -i["mult"])
+        stats = {"n": len(items), "up": sum(1 for i in items if i["mult"] >= 1)}
+        return items, stats
+
+    def post_receipts(self, force=False):
+        items, stats = self.receipts_data()
+        if not items:
+            log.info("receipts: no alerts with a market cap this week")
+            return False
+        self.publish("receipts", fmt.scorecard_x(items, stats), fmt.scorecard_tg(items, stats, self.s.fomo_ref_link),
+                     card=lambda: cards.receipts(items, stats))
+        return True
+
     def post_pnl_leaderboard(self):
         traders = [t for t in self.db.latest_traders() if t.get("pnl") is not None]
         if len(traders) < 3:
             return False
         traders.sort(key=lambda t: -t["pnl"])
         period = self.s.pnl_period_label
-        self.publish("leaderboard", fmt.leaderboard_x(traders, period), fmt.leaderboard_tg(traders, period, self.s.fomo_ref_link))
+        self.publish("leaderboard", fmt.leaderboard_x(traders, period), fmt.leaderboard_tg(traders, period, self.s.fomo_ref_link),
+                     card=lambda: cards.leaderboard(traders, period))
         self.tiktok_leaderboard(traders)
         return True
 
