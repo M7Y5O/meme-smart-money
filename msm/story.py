@@ -544,3 +544,58 @@ def check_caption():
             "4. Top holders spread out\n5. No bundled dev/sniper wallets\n6. Real traders buying\n"
             "Save this for your next trade.\nNot financial advice. Most memecoins go to zero."
             f"\n\n{video.HASHTAGS} #rugpull #memecointips")
+
+
+# ---------- story 6: where to find memecoins (educational, no data needed) ----------
+SOURCES = [
+    ("New launches", [("Coins a day", "Thousands", None), ("Risk", "Extreme", LOSS),
+                      ("Catch", "Most die in minutes", None)],
+     "Source one: new launches, straight from the launchpads. Thousands of coins a day. Extreme risk. "
+     "Most of them die within minutes, and bots buy before you can click."),
+    ("Trending pages", [("Coins a day", "Dozens", None), ("Risk", "High", LOSS),
+                        ("Catch", "Can be paid for", None)],
+     "Source two: trending pages. Easier to follow, but you're often late, and a spot on trending can be "
+     "bought with paid boosts."),
+    ("X narratives", [("Coins a day", "A few", None), ("Risk", "High", LOSS),
+                      ("Catch", "Shills hide exits", None)],
+     "Source three: narratives on X. Catch a meme early and it can run. But the loudest accounts are often "
+     "selling to the people they hype."),
+    ("Smart money", [("Coins a day", "A handful", None), ("Risk", "Medium", (255, 196, 64)),
+                     ("Catch", "Copy blindly = losses", None)],
+     "Source four: smart money. Coins bought by traders with a proven track record. Fewer coins, better odds. "
+     "The catch: copy them blindly, and you take their losses too."),
+]
+
+
+def find_scenes():
+    n = len(SOURCES)
+    out = [statement([[("Where to find", TEXT)], [("memecoins.", TEXT)], [(f"{n} sources, ranked.", TEXT2)]],
+                     f"Where do traders actually find memecoins? Here are the {n} main sources, from the riskiest "
+                     "to the smartest.", kicker="a $SMART MONEY guide", min_dur=3.5)]
+    for i, (title, rows, say) in enumerate(SOURCES, 1):
+        out.append(video.item_scene(f"Source {i}/{n}", title, TEXT, rows, [], "", say))
+    out.append(statement([[("Found one?", TEXT)], [("Run the 6 checks", TEXT)], [("before you buy.", TEXT2)]],
+                         "Found a coin? Don't buy yet. Run the six checks from our last video: mint, liquidity, "
+                         "exit size, holders, dev, and who's buying.", min_dur=3.5))
+    ch = os.environ.get("TELEGRAM_CHANNEL", "").strip()
+    bot = fmt.receipts_bot()
+    out.append(video.outro_scene("Start with smart money.",
+                                 ([f"Live alerts: {ch}"] if ch else [])
+                                 + ([f"Check any trader: @{bot}"] if bot else []),
+                                 "We track the smart money for you, live, on Telegram. Link in bio. "
+                                 + ("And check any trader's record with Receipts. " if bot else "")
+                                 + "Not financial advice."))
+    return out
+
+
+def find_render(out_path):
+    with tempfile.TemporaryDirectory() as wd:
+        return video.build(find_scenes(), out_path, wd)
+
+
+def find_caption():
+    return ("Where to find memecoins: 4 sources, ranked by risk 🔎\n"
+            "1. New launches: extreme risk\n2. Trending pages: often late, can be paid for\n"
+            "3. X narratives: watch who's shilling\n4. Smart money: fewer coins, better odds\n"
+            "Found one? Run the 6 checks before you buy.\nNot financial advice. Most memecoins go to zero."
+            f"\n\n{video.HASHTAGS} #memecointips #solanamemecoins")
