@@ -213,23 +213,139 @@ def brand():
 class El:
     """An element that fades/slides in at t_in and fades out at t_out."""
 
-    def __init__(self, img, x, y, t_in, t_out=None, dy=40, dur=0.5):
+    def __init__(self, img, x, y, t_in, t_out=None, dy=40, dur=0.5, pop=False):
         self.img, self.x, self.y, self.t_in, self.t_out, self.dy, self.dur = img, x, y, t_in, t_out, dy, dur
+        self.pop = pop
         self.alpha = img.getchannel("A")
         self.rgb = img.convert("RGB")
 
+    def _scale(self, t):
+        if not self.pop:
+            return 1.0
+        return round(0.6 + 0.4 * back_ease((t - self.t_in) / 0.45), 3)
+
     def state(self, t):
-        a = ease((t - self.t_in) / self.dur)
+        a = ease((t - self.t_in) / self.dur) if self.t_in > 0 else 1.0  # t_in <= 0: visible on frame one
         if self.t_out is not None:
             a *= 1 - ease((t - self.t_out) / 0.35)
-        return round(a, 3), round((1 - ease((t - self.t_in) / self.dur)) * self.dy)
+        off = 0 if self.pop else round((1 - ease((t - self.t_in) / self.dur)) * self.dy)
+        return round(a, 3), off, self._scale(t)
 
     def draw(self, frame, t):
-        a, off = self.state(t)
+        a, off, sc = self.state(t)
         if a <= 0:
             return
-        mask = self.alpha if a >= 1 else self.alpha.point(lambda v: int(v * a))
-        frame.paste(self.rgb, (int(self.x), int(self.y + off)), mask)
+        img, alpha = self.rgb, self.alpha
+        x, y = self.x, self.y + off
+        if sc != 1.0:
+            w, h = max(1, int(self.img.width * sc)), max(1, int(self.img.height * sc))
+            img, alpha = self.rgb.resize((w, h)), self.alpha.resize((w, h))
+            x, y = x + (self.img.width - w) / 2, y + (self.img.height - h) / 2
+        mask = alpha if a >= 1 else alpha.point(lambda v: int(v * a))
+        frame.paste(img, (int(x), int(y)), mask)
+
+
+def back_ease(t):
+    """Spring-like ease with a small overshoot (for pops)."""
+    t = max(0.0, min(1.0, t))
+    c = 1.70158
+    return 1 + (c + 1) * (t - 1) ** 3 + c * (t - 1) ** 2
+
+
+class Anim:
+    """A custom per-frame animation: fn(frame, local_t) draws directly while it is on screen."""
+
+    def __init__(self, fn, t_in, t_out=None):
+        self.fn, self.t_in, self.t_out = fn, t_in, t_out
+
+    def on(self, t):
+        return t >= self.t_in and (self.t_out is None or t < self.t_out + 0.35)
+
+    def state(self, t):
+        return ("a", int((t - self.t_in) * FPS)) if self.on(t) else ("off",)
+
+    def draw(self, frame, t):
+        if self.on(t):
+            self.fn(frame, t - self.t_in)
+
+
+class Progress:
+    """Thin progress bar at the very top: viewers see how much is left, and stay."""
+
+    def __init__(self, total):
+        self.total = total
+
+    def state(self, t):
+        return int(W * t / self.total)
+
+    def draw(self, frame, t):
+        from PIL import ImageDraw
+        ImageDraw.Draw(frame).rectangle((0, 0, int(W * t / self.total), 9), fill=GAIN)
+
+
+class Captions:
+    """TikTok-style captions: 2-4 words at a time, the spoken word in green, synced to the voice."""
+
+    def __init__(self, words, y=1330, size=70):
+        self.y, self.size = y, size
+        self.groups = []  # [(start, end, [(w_start, w_end, text)])]
+        cur = []
+        for w in words:
+            cur.append(w)
+            if len(cur) >= 3 or w[2].rstrip().endswith((".", "?", "!", ",", ":")):
+                self.groups.append(cur)
+                cur = []
+        if cur:
+            self.groups.append(cur)
+        self.spans = []
+        for i, g in enumerate(self.groups):
+            end = self.groups[i + 1][0][0] if i + 1 < len(self.groups) else g[-1][1] + 0.4
+            self.spans.append((g[0][0], min(end, g[-1][1] + 0.6)))
+        self._cache = {}
+
+    def _at(self, t):
+        for i, (a, b) in enumerate(self.spans):
+            if a <= t < b:
+                k = max([j for j, w in enumerate(self.groups[i]) if w[0] <= t] or [0])
+                return i, k
+        return None
+
+    def state(self, t):
+        at = self._at(t)
+        if at is None:
+            return None
+        pop = round(min(1.0, (t - self.spans[at[0]][0]) / 0.12), 2)
+        return at, pop
+
+    def _render(self, i, k):
+        from PIL import Image, ImageDraw
+        key = (i, k)
+        if key not in self._cache:
+            words = [w[2].strip() for w in self.groups[i]]
+            f = font(DISPLAY, fit(" ".join(words), DISPLAY, self.size, 800))
+            sp = f.getlength(" ")
+            ws = [f.getlength(x) for x in words]
+            width = int(sum(ws) + sp * (len(words) - 1) + 40)
+            img = Image.new("RGBA", (width, int(self.size * 1.5)), (0, 0, 0, 0))
+            d = ImageDraw.Draw(img)
+            x = 20
+            for j, (wd, wl) in enumerate(zip(words, ws)):
+                d.text((x, 6), wd, font=f, fill=(GAIN if j == k else TEXT) + (255,),
+                       stroke_width=7, stroke_fill=(0, 0, 0, 255))
+                x += wl + sp
+            self._cache[key] = img
+        return self._cache[key]
+
+    def draw(self, frame, t):
+        st = self.state(t)
+        if st is None:
+            return
+        (i, k), pop = st
+        img = self._render(i, k)
+        if pop < 1:
+            sc = 0.85 + 0.15 * pop
+            img = img.resize((max(1, int(img.width * sc)), max(1, int(img.height * sc))))
+        frame.paste(img, (int((W - img.width) / 2), int(self.y - img.height / 2)), img)
 
 
 def centered(img, y, t_in, t_out, dy=40, dur=0.5):
@@ -246,27 +362,72 @@ def _duration(path):
 
 def speak(text, path):
     """Neural TTS with edge-tts. Returns the clip duration, or None (no voice: the video stays silent)."""
-    if os.environ.get("MSM_VOICE", "x").lower() in ("", "off", "none"):
-        return None
+    return speak_words(text, path)[0]
+
+
+async def _tts(text, path, kw):
+    import edge_tts
+    words = []
     try:
-        import edge_tts
+        comm = edge_tts.Communicate(text, VOICE, boundary="WordBoundary", **kw)
+    except TypeError:  # older edge-tts: word boundaries are the default
+        comm = edge_tts.Communicate(text, VOICE, **kw)
+    with open(path, "wb") as f:
+        async for chunk in comm.stream():
+            if chunk["type"] == "audio":
+                f.write(chunk["data"])
+            elif chunk["type"] == "WordBoundary":
+                a = chunk["offset"] / 1e7
+                words.append((a, a + chunk["duration"] / 1e7, chunk["text"]))
+    return words
+
+
+def speak_words(text, path):
+    """Like speak(), plus word timings [(start_s, end_s, word)] for captions. (None, []) if there is no voice."""
+    if os.environ.get("MSM_VOICE", "x").lower() in ("", "off", "none"):
+        return None, []
+    try:
+        import edge_tts  # noqa: F401
     except ImportError:
-        return None
+        return None, []
     import time
     err = None
     for attempt in range(4):  # the free TTS service sometimes drops a request: retry, then try the default speed
         try:
             kw = {"rate": VOICE_RATE} if attempt < 2 else {}
-            asyncio.run(edge_tts.Communicate(text, VOICE, **kw).save(path))
+            words = asyncio.run(_tts(text, path, kw))
             d = _duration(path)
             if d > 0.3:
-                return d
+                return d, _attach_punct(text, words) if words else _even_words(text, d)
             err = "empty audio"
         except Exception as e:
             err = str(e)[:160]
         time.sleep(1.5 * (attempt + 1))
     log.warning("voice failed for %r (scene stays silent): %s", text[:60], err)
-    return None
+    return None, []
+
+
+def _even_words(text, d):
+    """Spread the words evenly over the clip when the voice gives no word timings (or there is no voice)."""
+    ws = text.split()
+    step = max(0.05, (d - 0.2) / max(1, len(ws)))
+    return [(0.1 + i * step, 0.1 + (i + 1) * step, w) for i, w in enumerate(ws)]
+
+
+def _attach_punct(text, words):
+    """TTS word boundaries drop punctuation: put it back from the script so captions can break on it."""
+    out, pos = [], 0
+    for a, b, w in words:
+        i = text.find(w, pos)
+        if i < 0:
+            out.append((a, b, w))
+            continue
+        j = i + len(w)
+        while j < len(text) and text[j] in ".,!?:;":
+            j += 1
+        out.append((a, b, text[i:j]))
+        pos = j
+    return out
 
 
 def _estimate(text):
@@ -304,31 +465,65 @@ ORDINAL = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine
 
 
 # ---------- assembly ----------
-def build(scenes, out_path, workdir):
-    """scenes: [{'say': str, 'els': fn(t0, t_out) -> [El], 'min': seconds}]. Times each scene on its narration."""
-    clips, t, els = [], 0.0, []
+def build(scenes, out_path, workdir, captions=False, progress=False, sfx=False, pad=0.7):
+    """scenes: [{'say': str, 'els': fn(t0, t_out) -> [El], 'min': seconds, 'sfx': [(offset_s, kind)]}].
+    Times each scene on its narration. captions: word-by-word subtitles; progress: top bar; sfx: whoosh/pop sounds."""
+    clips, t, els, words = [], 0.0, [], []
     head = brand()
+    fx = _sfx_files(workdir) if sfx else {}
     for i, sc in enumerate(scenes):
         clip = os.path.join(workdir, f"v{i}.mp3")
-        d = speak(sc["say"], clip)
-        dur = max(sc.get("min", 2.5), (d if d else _estimate(sc["say"])) + 0.7)
+        d, ws = speak_words(sc["say"], clip)
+        spoken = d if d else _estimate(sc["say"])
+        dur = max(sc.get("min", 2.5), spoken + pad)
+        start = t + 0.25
         if d:
-            clips.append((clip, t + 0.25))
+            clips.append((clip, start, 1.0))
+        words += [(start + a, start + b, w) for a, b, w in (ws or _even_words(sc["say"], spoken))]
+        if fx:
+            for off, kind in ([(0.0, "whoosh")] if i else []) + sc.get("sfx", []):
+                if kind in fx:
+                    clips.append((fx[kind], t + off, 0.35))
         last = i == len(scenes) - 1
         els += sc["els"](t, None if last else t + dur - 0.35)
         t += dur
-    els.insert(0, centered(head, 150, 0.05, None, dy=0))
+    els.insert(0, centered(head, 150, -1, None, dy=0))
     total = t + 0.6
+    if captions:
+        els.append(Captions(words))
+    if progress:
+        els.append(Progress(total))
     audio = _mix_audio(clips, total, workdir) if clips else None
     return encode(els, total, out_path, audio)
 
 
+def _sfx_files(workdir):
+    """Short sound effects made by ffmpeg itself (no copyrighted audio): a soft whoosh and a pop."""
+    out = {}
+    specs = {
+        "whoosh": "anoisesrc=d=0.35:c=pink:a=0.6,highpass=f=400,lowpass=f=5000,afade=t=in:d=0.12,afade=t=out:st=0.15:d=0.2",
+        "pop": "sine=f=880:d=0.09,afade=t=out:st=0.02:d=0.07",
+        "hit": "sine=f=70:d=0.35,afade=t=out:st=0.05:d=0.3",
+    }
+    for k, spec in specs.items():
+        p = os.path.join(workdir, f"sfx-{k}.wav")
+        try:
+            subprocess.run([ffmpeg_bin(), "-v", "error", "-y", "-f", "lavfi", "-i", spec, "-ar", "44100", p],
+                           check=True, capture_output=True)
+            out[k] = p
+        except Exception as e:
+            log.warning("sfx %s failed: %s", k, str(e)[:120])
+    return out
+
+
 def _mix_audio(clips, total, workdir):
     out = os.path.join(workdir, "voice.m4a")
+    clips = [c if len(c) == 3 else (c[0], c[1], 1.0) for c in clips]
     cmd = [ffmpeg_bin(), "-v", "error", "-y"]
-    for c, _ in clips:
+    for c, _, _ in clips:
         cmd += ["-i", c]
-    parts = [f"[{i}:a]aresample=44100,adelay={int(st * 1000)}:all=1[a{i}]" for i, (_, st) in enumerate(clips)]
+    parts = [f"[{i}:a]aresample=44100,volume={vol},adelay={int(st * 1000)}:all=1[a{i}]"
+             for i, (_, st, vol) in enumerate(clips)]
     mix = "".join(f"[a{i}]" for i in range(len(clips)))
     flt = ";".join(parts) + f";{mix}amix=inputs={len(clips)}:normalize=0,apad,atrim=0:{total:.2f}[out]"
     cmd += ["-filter_complex", flt, "-map", "[out]", "-ac", "2", "-c:a", "aac", "-b:a", "128k", out]
