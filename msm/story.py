@@ -8,7 +8,7 @@ import os
 import tempfile
 
 from . import detect, fmt, video
-from .video import DISPLAY, GAIN, LOSS, MARGIN, MED, SEMI, TEXT, TEXT2, W, El, centered, fit, text_img
+from .video import DISPLAY, GAIN, LOSS, MARGIN, MED, SEMI, TEXT, TEXT2, W, Anim, El, centered, fit, text_img
 
 log = logging.getLogger("msm")
 
@@ -661,3 +661,192 @@ def why_caption():
             "and shows how its own alerts did. Wins AND losses.\n"
             "We track the wallets. You decide.\nNot financial advice."
             f"\n\n{video.HASHTAGS} #onchain")
+
+
+# ---------- story 8: how most people lose money (animated, captions, made to be shared) ----------
+_PATH = [(0, .12), (.08, .14), (.16, .13), (.24, .19), (.32, .21), (.40, .30), (.48, .45), (.56, .70),
+         (.62, .92), (.66, 1.0), (.70, .82), (.76, .46), (.84, .26), (.92, .20), (1, .18)]
+_SM_X, _PEAK_X, _CRASH_X = .24, .66, .92
+CX, CY, CW, CH = MARGIN, 470, W - 2 * MARGIN, 680
+
+
+def _pt(x, y):
+    pad = 40
+    return CX + pad + x * (CW - 2 * pad), CY + CH - 70 - y * (CH - 150)
+
+
+def _label(d, xy, text, color, up=True):
+    f = video.font(SEMI, 34)
+    w = f.getlength(text) + 36
+    x, y = xy
+    x = min(max(CX + 12, x - w / 2), CX + CW - w - 12)
+    y = y - 96 if up else y + 34
+    d.rounded_rectangle((x, y, x + w, y + 58), radius=29, fill=color + (255,))
+    d.text((x + 18, y + 9), text, font=f, fill=(0, 0, 0, 255))
+
+
+def _chart(frame, p, shake=0, show_sm=True, show_you=True, show_crash=True, highlight_sm=False):
+    """Draw the example price chart up to progress p (0..1)."""
+    from PIL import Image, ImageDraw
+    import random
+    ox, oy = (random.randint(-shake, shake), random.randint(-shake, shake)) if shake else (0, 0)
+    layer = Image.new("RGBA", (W, video.H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    d.rounded_rectangle((CX, CY, CX + CW, CY + CH), radius=44, fill=video.TILE + (255,))
+    for gy in (0.25, 0.5, 0.75):
+        yy = CY + 40 + gy * (CH - 110)
+        d.line((CX + 30, yy, CX + CW - 30, yy), fill=(255, 255, 255, 18), width=2)
+    d.text((CX + 36, CY + 26), "$FROG", font=video.font(DISPLAY, 46), fill=TEXT + (255,))
+    tag = "example"
+    ft = video.font(MED, 28)
+    d.text((CX + CW - 36 - ft.getlength(tag), CY + 36), tag, font=ft, fill=TEXT2 + (255,))
+    pts = []
+    for (x0, y0), (x1, y1) in zip(_PATH, _PATH[1:]):
+        if x0 >= p:
+            break
+        if x1 > p:
+            y1 = y0 + (y1 - y0) * (p - x0) / (x1 - x0)
+            x1 = p
+        pts.append(((x0, y0), (x1, y1)))
+    for (x0, y0), (x1, y1) in pts:
+        col = GAIN if x1 <= _PEAK_X else LOSS
+        d.line((*_pt(x0, y0), *_pt(x1, y1)), fill=col + (255,), width=12, joint="curve")
+    if pts:
+        hx, hy = _pt(*pts[-1][1])
+        d.ellipse((hx - 14, hy - 14, hx + 14, hy + 14), fill=(GAIN if p <= _PEAK_X else LOSS) + (255,))
+    if show_sm and p >= _SM_X:
+        sx, sy = _pt(_SM_X, .19)
+        r = 20 if highlight_sm else 14
+        d.ellipse((sx - r, sy - r, sx + r, sy + r), fill=GAIN + (255,), outline=(255, 255, 255, 255), width=4)
+        _label(d, (sx, sy), "Smart money buys", GAIN)
+    if show_you and p >= _PEAK_X:
+        yx, yy = _pt(_PEAK_X, 1.0)
+        d.ellipse((yx - 16, yy - 16, yx + 16, yy + 16), fill=TEXT + (255,))
+        _label(d, (yx, yy), "YOU buy", TEXT, up=False)
+    if show_crash and p >= _CRASH_X:
+        cx, cy = _pt(_CRASH_X, .20)
+        _label(d, (cx, cy), "-80%", LOSS)
+    frame.paste(layer, (ox, oy), layer)
+
+
+def _flash(frame, lt, dur=0.45):
+    from PIL import Image
+    a = max(0.0, 1 - lt / dur)
+    if a > 0:
+        red = Image.new("RGB", frame.size, LOSS)
+        frame.paste(red, (0, 0), Image.new("L", frame.size, int(110 * a)))
+
+
+def _tweet_card():
+    from PIL import Image, ImageDraw
+    w, h = W - 2 * MARGIN, 360
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((0, 0, w - 1, h - 1), radius=44, fill=video.TILE + (255,))
+    d.ellipse((40, 40, 130, 130), fill=(70, 70, 74, 255))
+    d.text((152, 44), "Big Crypto Account", font=video.font(DISPLAY, 44), fill=TEXT + (255,))
+    d.text((152, 98), "2m · example", font=video.font(MED, 32), fill=TEXT2 + (255,))
+    f = video.font(DISPLAY, 60)
+    d.text((40, 170), "$FROG is going 100x.", font=f, fill=TEXT + (255,))
+    d.text((40, 245), "Don't miss this one.", font=f, fill=TEXT + (255,))
+    return img
+
+
+def _notif_card():
+    from PIL import Image, ImageDraw
+    w, h = W - 2 * MARGIN, 230
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((0, 0, w - 1, h - 1), radius=40, fill=(30, 30, 33, 255), outline=(255, 255, 255, 30), width=2)
+    logo = video.sm_logo(96)
+    img.paste(logo, (34, 34), logo)
+    d.text((152, 36), "Smart Money", font=video.font(DISPLAY, 42), fill=TEXT + (255,))
+    fn = video.font(MED, 30)
+    d.text((w - 40 - fn.getlength("now"), 44), "now", font=fn, fill=TEXT2 + (255,))
+    d.ellipse((154, 112, 176, 134), fill=GAIN + (255,))
+    d.text((192, 100), "3 top traders bought $FROG", font=video.font(SEMI, 40), fill=TEXT + (255,))
+    d.text((152, 162), "example alert", font=fn, fill=TEXT2 + (255,))
+    return img
+
+
+def rug_scenes():
+    out = []
+
+    def hook(t0, t_out):
+        big = text_img([[("-80%", LOSS)]], 300)
+        line = text_img([[("This is how most people", TEXT)], [("lose money on memecoins.", TEXT2)]], 66, align="center")
+        return [El(big, (W - big.width) / 2, 520, -1, t_out, pop=False),
+                centered(line, 520 + big.height + 40, -1, t_out, dy=0),
+                Anim(lambda fr, lt: _flash(fr, lt, 0.5), t0 + 0.2, t0 + 0.7)]
+    out.append({"say": "This is how most people lose money on memecoins.", "els": hook, "min": 3.2,
+                "sfx": [(0.2, "hit")]})
+
+    def tweet(t0, t_out):
+        k = text_img([[("It starts with a tweet.", TEXT2)]], 54, SEMI, align="center")
+        card = _tweet_card()
+        return [centered(k, 420, t0 + 0.05, t_out, dy=0),
+                El(card, MARGIN, 560, t0 + 0.25, t_out, pop=True)]
+    out.append({"say": "It starts with a tweet. A big account says this coin is going a hundred x.",
+                "els": tweet, "min": 3.5, "sfx": [(0.25, "pop")]})
+
+    def pump(t0, t_out):
+        k = text_img([[("The chart goes vertical.", TEXT2)]], 54, SEMI, align="center")
+        return [centered(k, 340, t0 + 0.05, t_out, dy=0),
+                Anim(lambda fr, lt: _chart(fr, min(_PEAK_X, lt / 3.2 * _PEAK_X), show_sm=False,
+                                           show_you=lt > 3.3), t0, t_out)]
+    out.append({"say": "The chart goes vertical. Everyone is talking about it. So you buy.",
+                "els": pump, "min": 4.4, "sfx": [(3.3, "pop")]})
+
+    def before(t0, t_out):
+        k = text_img([[("But who bought ", TEXT2), ("before", GAIN), (" the hype?", TEXT2)]], 54, SEMI, align="center")
+        return [centered(k, 340, t0 + 0.05, t_out, dy=0),
+                Anim(lambda fr, lt: _chart(fr, _PEAK_X, highlight_sm=int(lt * 3) % 2 == 0), t0, t_out)]
+    out.append({"say": "But here's what you didn't see. Hours earlier, the smart money had already bought. Way lower.",
+                "els": before, "min": 4.0, "sfx": [(0.4, "pop")]})
+
+    def crash(t0, t_out):
+        k = text_img([[("Then they sell. ", TEXT2), ("To you.", LOSS)]], 54, SEMI, align="center")
+        dur = 1.6
+        return [centered(k, 340, t0 + 0.05, t_out, dy=0),
+                Anim(lambda fr, lt: _chart(fr, min(1.0, _PEAK_X + (1 - _PEAK_X) * lt / dur),
+                                           shake=10 if 0.9 < lt < 1.6 else 0), t0, t_out),
+                Anim(lambda fr, lt: _flash(fr, lt), t0 + 1.0, t0 + 1.5)]
+    out.append({"say": "And when the hype hits, who do you think they're selling to? You.",
+                "els": crash, "min": 3.8, "sfx": [(1.0, "hit")]})
+
+    def notif(t0, t_out):
+        card = _notif_card()
+        k = text_img([[("So we track", TEXT)], [("those wallets.", TEXT)]], 104, align="center")
+        sub = text_img([[("When top traders buy the same coin,", TEXT2)], [("you see it as it happens.", TEXT2)]],
+                       44, MED, align="center")
+
+        def slide(fr, lt):
+            y = -card.height + (420 + card.height) * video.back_ease(lt / 0.6)
+            fr.paste(card, (MARGIN, int(y)), card)
+        return [Anim(slide, t0 + 0.1, t_out),
+                centered(k, 760, t0 + 0.6, t_out),
+                centered(sub, 760 + k.height + 36, t0 + 0.9, t_out)]
+    out.append({"say": "That's why we built a bot that tracks those wallets. When the top traders buy the same coin, "
+                       "you see it as it happens. Not hours later, in a tweet.",
+                "els": notif, "min": 4.5, "sfx": [(0.1, "pop")]})
+
+    out.append(statement([[("Not every alert wins.", TEXT)], [("We post our misses too.", TEXT2)]],
+                         "Not every alert wins. And we post our misses too.", min_dur=2.8))
+    ch = os.environ.get("TELEGRAM_CHANNEL", "").strip()
+    out.append(video.outro_scene("Follow the wallets, not the hype.",
+                                 ([f"Live alerts: {ch}"] if ch else []) + ["Every alert, wins and losses"],
+                                 "Follow the wallets, not the hype. Live alerts on Telegram, link in bio."))
+    return out
+
+
+def rug_render(out_path):
+    with tempfile.TemporaryDirectory() as wd:
+        return video.build(rug_scenes(), out_path, wd, captions=True, progress=True, sfx=True, pad=0.4)
+
+
+def rug_caption():
+    return ("This is how most people lose money on memecoins 📉\n"
+            "Tweet → pump → you buy the top → the wallets that bought early sell to you.\n"
+            "Follow the wallets, not the hype. Live alerts on Telegram (link in bio).\n"
+            "$FROG is a made-up example. Not financial advice."
+            f"\n\n{video.HASHTAGS} #memecointips #rugpull #fyp")
