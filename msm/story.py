@@ -599,3 +599,65 @@ def find_caption():
             "3. X narratives: watch who's shilling\n4. Smart money: fewer coins, better odds\n"
             "Found one? Run the 6 checks before you buy.\nNot financial advice. Most memecoins go to zero."
             f"\n\n{video.HASHTAGS} #memecointips #solanamemecoins")
+
+
+# ---------- story 7: why $SMART MONEY exists (the problem we solve, the value we bring) ----------
+PROBLEMS = [
+    ("Too much noise", [("Coins a day", "Thousands", None), ("Real signals", "A handful", None),
+                        ("Result", "You chase hype", LOSS)],
+     "Problem one: too much noise. Thousands of new coins every day. Only a handful matter. "
+     "So most people end up chasing hype."),
+    ("No view on the best", [("Their wallets", "Public on-chain", None), ("Watching 24/7", "Impossible by hand", None),
+                             ("Result", "You find out too late", LOSS)],
+     "Problem two: you can't see what the best traders do. Their wallets are public, but nobody can watch "
+     "them all, all day. By the time you hear about a coin, it's late."),
+    ("Nobody shows losses", [("Calls accounts", "Show their wins", None), ("Their losses", "Deleted", None),
+                             ("Result", "You can't trust anyone", LOSS)],
+     "Problem three: nobody tells the truth. Calls accounts show their wins and delete their losses. "
+     "So you never know who to trust."),
+]
+
+
+def why_scenes():
+    out = [statement([[("Thousands of coins.", TEXT)], [("Endless shills.", TEXT)], [("Who do you trust?", TEXT2)]],
+                     "Thousands of new memecoins a day. Endless shills. Who do you actually trust?",
+                     kicker="why $SMART MONEY exists", min_dur=3.5)]
+    for i, (title, rows, say) in enumerate(PROBLEMS, 1):
+        out.append(video.item_scene(f"Problem {i}/{len(PROBLEMS)}", title, TEXT, rows, [], "", say))
+    out.append(statement([[("So we built a bot", TEXT)], [("that watches", TEXT)], [("the best traders.", TEXT2)]],
+                         "So we built a bot that watches the best traders for you.", min_dur=3.0))
+    out.append(video.item_scene("What $SM does", "The fix", TEXT,
+                                [("Filters", "~25 proven wallets", GAIN), ("Watches", "24/7", GAIN),
+                                 ("Alerts", "When they cluster", GAIN), ("Shows", "Wins AND losses", GAIN)],
+                                [], "",
+                                "It follows the top traders on Fomo, the ones with real, verified profits. It watches "
+                                "their wallets around the clock. It alerts you when several of them buy the same coin. "
+                                "And every week, it shows how its own alerts did. Wins and losses."))
+    out.append(statement([[("Not calls.", TEXT)], [("Not promises.", TEXT)], [("Information.", GAIN)]],
+                         "No calls. No promises. Just information: what the best traders do, fast, and honestly.",
+                         min_dur=3.0))
+    out.append(statement([[("We even show you", TEXT)], [("when we're wrong.", TEXT2)]],
+                         "We even show you when we're wrong. Because that's how you know you can trust the rest.",
+                         min_dur=3.0))
+    ch = os.environ.get("TELEGRAM_CHANNEL", "").strip()
+    bot = fmt.receipts_bot()
+    out.append(video.outro_scene("We track the wallets. You decide.",
+                                 ([f"Live alerts: {ch}"] if ch else [])
+                                 + ([f"Check any trader: @{bot}"] if bot else []),
+                                 "We track the wallets. You decide. Live alerts on Telegram, link in bio. "
+                                 "Not financial advice."))
+    return out
+
+
+def why_render(out_path):
+    with tempfile.TemporaryDirectory() as wd:
+        return video.build(why_scenes(), out_path, wd)
+
+
+def why_caption():
+    return ("Why $SMART MONEY exists 👀\n"
+            "Too much noise. No view on the best traders. Nobody shows their losses.\n"
+            "So we built a bot that watches the top Fomo traders 24/7, alerts when they cluster on a coin, "
+            "and shows how its own alerts did. Wins AND losses.\n"
+            "We track the wallets. You decide.\nNot financial advice."
+            f"\n\n{video.HASHTAGS} #onchain")
