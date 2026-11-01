@@ -17,6 +17,7 @@
   python -m msm story-check    # educational video ("How to check a memecoin in 60 seconds")
   python -m msm story-find     # educational video ("Where to find memecoins")
   python -m msm story-why      # brand video ("Why $SMART MONEY exists")
+  python -m msm story-rug      # animated video with captions ("How most people lose money on memecoins")
   python -m msm receipts       # post the weekly scorecard of our own alerts now
   python -m msm sync           # send the bot's activity to the dashboard database (DATABASE_URL) now
   python -m msm traders        # fetch and print today's top traders from the Fomo API
@@ -132,6 +133,9 @@ def main(argv):
     elif cmd == "story-why":  # brand video: the problem we solve and the value we bring
         from . import story
         print("story video:", bot.tiktok("story why", story.why_render, story.why_caption()))
+    elif cmd == "story-rug":  # animated video with captions: "How most people lose money on memecoins"
+        from . import story
+        print("story video:", bot.tiktok("story rug", story.rug_render, story.rug_caption()))
     elif cmd == "receipts":  # weekly scorecard of our own alerts (market cap at alert vs now), posted now
         bot.refresh_wallets()
         print("receipts:", bot.post_receipts())
