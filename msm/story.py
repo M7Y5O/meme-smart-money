@@ -850,3 +850,167 @@ def rug_caption():
             "Follow the wallets, not the hype. Live alerts on Telegram (link in bio).\n"
             "$FROG is a made-up example. Not financial advice."
             f"\n\n{video.HASHTAGS} #memecointips #rugpull #fyp")
+
+
+# ---------- story 9: market cap is a lie (liquidity explained, animated, captions) ----------
+def _tank(d, x, y, w, h, level, label, value, color):
+    """A pool reserve drawn as a tank filled to `level` (0..1)."""
+    d.rounded_rectangle((x, y, x + w, y + h), radius=36, fill=(28, 28, 30, 255), outline=(255, 255, 255, 40), width=3)
+    lv = max(0.0, min(1.0, level))
+    if lv > 0.01:
+        d.rounded_rectangle((x + 8, y + 8 + (h - 16) * (1 - lv), x + w - 8, y + h - 8), radius=28, fill=color + (230,))
+    fl = video.font(SEMI, 38)
+    d.text((x + (w - fl.getlength(label)) / 2, y - 62), label, font=fl, fill=TEXT2 + (255,))
+    fv = video.font(DISPLAY, video.fit(value, DISPLAY, 50, w + 40))
+    d.text((x + (w - fv.getlength(value)) / 2, y + h + 22), value, font=fv, fill=TEXT + (255,))
+
+
+def _layer():
+    from PIL import Image, ImageDraw
+    img = Image.new("RGBA", (W, video.H), (0, 0, 0, 0))
+    return img, ImageDraw.Draw(img)
+
+
+def _center_text(d, y, text, size, color, name=DISPLAY):
+    f = video.font(name, size)
+    d.text(((W - f.getlength(text)) / 2, y), text, font=f, fill=color + (255,))
+
+
+def _pool(frame, frog, sol, extra=None):
+    img, d = _layer()
+    tw, th, y = 330, 520, 560
+    _tank(d, 150, y, tw, th, frog, "$FROG", f"{frog * 2:.2f}M", (120, 120, 126))
+    _tank(d, W - 150 - tw, y, tw, th, sol, "SOL", f"{sol * 200:.0f} SOL", GAIN)
+    _center_text(d, y + th / 2 - 30, "+", 60, TEXT2)
+    if extra:
+        extra(d)
+    frame.paste(img, (0, 0), img)
+
+
+def liq_scenes():
+    out = []
+
+    def hook(t0, t_out):
+        def draw(fr, lt):
+            img, d = _layer()
+            _center_text(d, 520, "$500K", 230, TEXT)
+            p = min(1.0, max(0.0, (lt - 0.6) / 0.35))
+            if p > 0:
+                f = video.font(DISPLAY, 230)
+                tw = f.getlength("$500K")
+                x0 = (W - tw) / 2 - 20
+                d.line((x0, 660, x0 + (tw + 40) * p, 640), fill=LOSS + (255,), width=22)
+            _center_text(d, 860, "market cap", 54, TEXT2, SEMI)
+            if lt > 1.0:
+                _center_text(d, 960, "You'll never sell for that.", 62, LOSS)
+            fr.paste(img, (0, 0), img)
+        return [Anim(draw, -1, t_out)]
+    out.append({"say": "This coin has a five hundred thousand dollar market cap. You will never sell it for that. Here's why.",
+                "els": hook, "min": 3.4, "sfx": [(0.6, "hit")]})
+
+    def pool(t0, t_out):
+        k = text_img([[("Meet the pool.", TEXT)]], 80, align="center")
+        tag = text_img([[("example", TEXT2)]], 30, MED, align="center")
+        return [centered(k, 330, t0 + 0.05, t_out, dy=0), centered(tag, 330 + k.height + 6, t0 + 0.05, t_out, dy=0),
+                Anim(lambda fr, lt: _pool(fr, 0.5 * video.ease(lt / 0.5), 0.5 * video.ease(lt / 0.5)), t0 + 0.2, t_out)]
+    out.append({"say": "Memecoins don't trade on an order book. They trade against a pool: coins on one side, money on the other.",
+                "els": pool, "min": 4.0, "sfx": [(0.2, "pop")]})
+
+    def buy(t0, t_out):
+        k = text_img([[("You buy.", TEXT)]], 80, align="center")
+
+        def draw(fr, lt):
+            p = video.ease((lt - 0.4) / 1.6)
+            sol = 0.5 * (1 + 0.3 * p)
+            frog = 0.5 / (1 + 0.3 * p)
+
+            def extra(d):
+                price = ((sol / 0.5) ** 2 - 1) * 100
+                _center_text(d, 1190, f"Price +{price:.0f}%", 72, GAIN)
+            _pool(fr, frog, sol, extra)
+        return [centered(k, 330, t0 + 0.05, t_out, dy=0), Anim(draw, t0, t_out)]
+    out.append({"say": "When you buy, money goes in and coins come out. Fewer coins left, so the price goes up. "
+                       "Sell, and it's the opposite.",
+                "els": buy, "min": 4.5, "sfx": [(0.4, "whoosh")]})
+
+    def size(t0, t_out):
+        k = text_img([[("Same $1,000 buy.", TEXT)]], 76, align="center")
+
+        def draw(fr, lt):
+            img, d = _layer()
+            p = video.ease((lt - 0.6) / 1.2)
+            _tank(d, 120, 640, 360, 360, 0.15 + 0.03 * p, "Small pool", "$10K", GAIN)
+            _tank(d, W - 480, 640, 360, 360, 0.85, "Big pool", "$500K", GAIN)
+            if lt > 0.6:
+                f = video.font(DISPLAY, 84)
+                a, b = f"+{44 * p:.0f}%", f"+{0.8 * p:.1f}%"
+                d.text((300 - f.getlength(a) / 2, 1100), a, font=f, fill=LOSS + (255,))
+                d.text((W - 300 - f.getlength(b) / 2, 1100), b, font=f, fill=TEXT + (255,))
+            fr.paste(img, (0, 0), img)
+        return [centered(k, 360, t0 + 0.05, t_out, dy=0), Anim(draw, t0 + 0.15, t_out)]
+    out.append({"say": "Now size matters. Put a thousand dollars into a ten thousand dollar pool, and the price jumps "
+                       "forty four percent. In a five hundred thousand dollar pool? Less than one percent.",
+                "els": size, "min": 5.0, "sfx": [(0.6, "pop")]})
+
+    def lie(t0, t_out):
+        k = text_img([[("$500K market cap.", TEXT)], [("$10K liquidity.", LOSS)]], 84, align="center")
+
+        def draw(fr, lt):
+            img, d = _layer()
+            p = video.ease((lt - 0.8) / 1.0)
+            card = video.tile([("Your bag, on paper", "$25,000", None),
+                               ("What you'd get selling", f"${25000 - (25000 - 4200) * p:,.0f}", LOSS)])
+            img.paste(card, (MARGIN, 760), card)
+            fr.paste(img, (0, 0), img)
+        return [centered(k, 360, t0 + 0.05, t_out, dy=0), Anim(draw, t0 + 0.3, t_out)]
+    out.append({"say": "So on a coin with a five hundred thousand dollar market cap and only ten thousand dollars of "
+                       "liquidity, a twenty five thousand dollar bag gets you about four thousand if you sell. "
+                       "The market cap is a mirage.",
+                "els": lie, "min": 5.5, "sfx": [(0.8, "hit")]})
+
+    def rug(t0, t_out):
+        k = text_img([[("Who holds the pool's key?", TEXT)]], 70, align="center")
+
+        def draw(fr, lt):
+            img, d = _layer()
+            drain = video.ease((lt - 4.5) / 0.5)
+            _tank(d, (W - 420) / 2, 560, 420, 400, 0.6 * (1 - drain), "the pool", "$0" if drain > 0.9 else "$10K", GAIN)
+            if lt > 0.5:
+                txt = "Key: not locked" if lt < 4.5 else "Rug pull. -100%"
+                _center_text(d, 1090, txt, 60, LOSS)
+            fr.paste(img, (0, 0), img)
+        return [centered(k, 360, t0 + 0.05, t_out, dy=0), Anim(draw, t0 + 0.1, t_out),
+                Anim(lambda fr, lt: _flash(fr, lt), t0 + 4.6, t0 + 5.1)]
+    out.append({"say": "And whoever created the pool holds the key to it. If that key isn't burned or locked, "
+                       "the dev can pull all the money out. That's a rug pull.",
+                "els": rug, "min": 6.0, "sfx": [(4.6, "hit")]})
+
+    def checks(t0, t_out):
+        r = text_img([[("Before you buy", TEXT2)]], 44, SEMI)
+        big = text_img([[("3 checks", TEXT)]], 130)
+        card = video.tile([("Liquidity vs mcap", "Not a mirage", GAIN), ("Pool key", "Burned or locked", GAIN),
+                           ("Volume", "Real buyers, not bots", GAIN)])
+        y = 300
+        return [El(r, MARGIN, y, t0 + 0.05, t_out, dy=0), El(big, MARGIN, y + r.height + 20, t0 + 0.15, t_out, dy=50, dur=0.55),
+                El(card, MARGIN, y + r.height + big.height + 80, t0 + 0.45, t_out, dy=50)]
+    out.append({"say": "So before you buy, check three things. Liquidity compared to market cap. Who holds the pool. "
+                       "And whether the volume is real, because it's often just bots trading with themselves.",
+                "els": checks, "min": 4.0, "sfx": [(0.15, "pop")]})
+    ch = os.environ.get("TELEGRAM_CHANNEL", "").strip()
+    out.append(video.outro_scene("Market cap lies. Liquidity doesn't.",
+                                 ([f"Live alerts: {ch}"] if ch else []) + ["$FROG is a made-up example"],
+                                 "Market cap lies. Liquidity doesn't. Follow for more, and get our live alerts on Telegram."))
+    return out
+
+
+def liq_render(out_path):
+    with tempfile.TemporaryDirectory() as wd:
+        return video.build(liq_scenes(), out_path, wd, captions=True, progress=True, sfx=True, pad=0.4)
+
+
+def liq_caption():
+    return ("Market cap is a lie 🫗\n"
+            "$500K mcap + $10K liquidity = a $25K bag sells for ~$4K.\n"
+            "Before you buy: liquidity vs mcap, who holds the pool, is the volume real?\n"
+            "$FROG is a made-up example. Not financial advice."
+            f"\n\n{video.HASHTAGS} #memecointips #liquidity #rugpull #fyp")
