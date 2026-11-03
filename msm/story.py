@@ -1299,3 +1299,187 @@ def tp_caption():
             "The rule: take your initials. At 2x, sell half: your $100 is back, the rest rides free.\n"
             "$FROG is a made-up example. Not financial advice."
             f"\n\n{video.HASHTAGS} #memecointips #takeprofit #fyp")
+
+
+# ---------- story 12: skill or luck? (promotes Receipts, animated, captions) ----------
+_VIOLET = (150, 110, 255)
+_INK = (28, 28, 30)
+
+
+def _receipt(handle, score, rows, verdict, vcol, w=820):
+    """A paper receipt, as Receipts prints it. rows: [(label, value, color or None)]. Returns RGBA."""
+    from PIL import Image, ImageDraw
+    rh, top = 84, 300
+    h = top + rh * len(rows) + 210
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    paper = (246, 245, 240, 255)
+    zz = 26
+    d.rectangle((0, 0, w, h - zz), fill=paper)
+    pts = [(0, h - zz)] + [(x, h - (0 if (x // zz) % 2 else zz)) for x in range(0, w + 1, zz)] + [(w, h - zz)]
+    d.polygon(pts, fill=paper)
+
+    def ctext(y, t, f, col):
+        d.text(((w - f.getlength(t)) / 2, y), t, font=f, fill=col + (255,))
+    ctext(40, "RECEIPTS", video.font(DISPLAY, 46), _INK)
+    ctext(98, handle, video.font(SEMI, 36), (110, 110, 115))
+    dash = (190, 190, 186, 255)
+    for x in range(40, w - 40, 22):
+        d.line((x, 160, x + 11, 160), fill=dash, width=3)
+    fs = video.font(DISPLAY, 96)
+    s, t = f"{score}", "/100"
+    ft = video.font(SEMI, 40)
+    sx = (w - fs.getlength(s) - ft.getlength(t)) / 2
+    d.text((sx, 172), s, font=fs, fill=_INK + (255,))
+    d.text((sx + fs.getlength(s) + 6, 222), t, font=ft, fill=(110, 110, 115, 255))
+    fl, fv = video.font(MED, 34), video.font(DISPLAY, 40)
+    for i, (lab, val, col) in enumerate(rows):
+        y = top + i * rh + 20
+        d.text((48, y + 4), lab, font=fl, fill=(90, 90, 95, 255))
+        d.text((w - 48 - fv.getlength(val), y), val, font=fv, fill=(col or _INK) + (255,))
+    y = top + rh * len(rows) + 20
+    for x in range(40, w - 40, 22):
+        d.line((x, y, x + 11, y), fill=dash, width=3)
+    # verdict stamp, tilted
+    f = video.font(DISPLAY, 54)
+    sw, sh = int(f.getlength(verdict) + 70), 104
+    st = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(st)
+    sd.rounded_rectangle((3, 3, sw - 4, sh - 4), radius=18, outline=vcol + (255,), width=7)
+    sd.text((35, 20), verdict, font=f, fill=vcol + (255,))
+    st = st.rotate(-6, expand=True, resample=Image.BICUBIC)
+    img.paste(st, (int((w - st.width) / 2), y + 30), st)
+    return img
+
+
+def _print(frame, rec, lt, y, start=0.2, dur=1.4):
+    """Receipt sliding out of a printer slot, top first."""
+    p = video.ease((lt - start) / dur)
+    if p <= 0:
+        return
+    hh = max(1, int(rec.height * p))
+    part = rec.crop((0, 0, rec.width, hh))
+    x = int((W - rec.width) / 2)
+    frame.paste(part, (x, y), part)
+
+
+def _slot(d, y):
+    d.rounded_rectangle((MARGIN + 20, y - 34, W - MARGIN - 20, y + 6), radius=20, fill=(44, 44, 46, 255))
+    d.rounded_rectangle((MARGIN + 60, y - 10, W - MARGIN - 60, y + 2), radius=6, fill=(0, 0, 0, 255))
+
+
+def _bubble(d, text, y, right, col, tcol, size=44):
+    f = video.font(SEMI, size)
+    w = f.getlength(text) + 64
+    x = W - MARGIN - w if right else MARGIN
+    d.rounded_rectangle((x, y, x + w, y + size + 50), radius=36, fill=col + (255,))
+    d.text((x + 32, y + 22), text, font=f, fill=tcol + (255,))
+
+
+def rc_scenes():
+    out = []
+    bot = fmt.receipts_bot() or "fomoreceipts_bot"
+
+    def hook(t0, t_out):
+        def draw(fr, lt):
+            img, d = _layer()
+            v = int(80000 * video.ease((lt - 1.1) / 1.2))
+            _center_text(d, 560, f"+${v:,}", 190, GAIN)
+            _center_text(d, 800, "@lucky_example on fomo", 50, TEXT2, SEMI)
+            if lt > 2.6:
+                _center_text(d, 930, "Skill or luck?", 96, TEXT)
+            fr.paste(img, (0, 0), img)
+        return [Anim(draw, -1, t_out)]
+    out.append({"say": "This trader is up eighty thousand dollars. Should you copy him? Skill, or luck?",
+                "els": hook, "min": 3.6, "sfx": [(1.6, "pop")]})
+
+    def onecoin(t0, t_out):
+        k = text_img([[("Look closer.", TEXT)]], 80, align="center")
+
+        def draw(fr, lt):
+            img, d = _layer()
+            p = video.ease((lt - 0.4) / 1.0)
+            q = video.ease((lt - 2.0) / 0.8)
+            x0, x1 = MARGIN, W - MARGIN
+            for i, (lab, val, frac, col, show) in enumerate([("1 coin", "+$92,000", 1.0, GAIN, p),
+                                                              ("Everything else", "-$12,000", 0.13, LOSS, q)]):
+                y = 620 + i * 260
+                if show <= 0:
+                    continue
+                d.text((x0, y), lab, font=video.font(SEMI, 44), fill=TEXT2 + (255,))
+                fv = video.font(DISPLAY, 60)
+                d.text((x1 - fv.getlength(val), y - 8), val, font=fv, fill=col + (255,))
+                d.rounded_rectangle((x0, y + 80, x0 + max(40, (x1 - x0) * frac * show), y + 160), radius=28,
+                                    fill=col + (255,))
+            fr.paste(img, (0, 0), img)
+        return [centered(k, 360, t0 + 0.05, t_out, dy=0), Anim(draw, t0, t_out)]
+    out.append({"say": "Look closer. One single coin made him ninety two thousand. Everything else? Down twelve thousand. "
+                       "That's not a strategy. That's one lucky hit.",
+                "els": onecoin, "min": 5.0, "sfx": [(0.4, "whoosh"), (2.0, "hit")]})
+
+    lucky = _receipt("@lucky_example", 34, [("Win rate", "21%", LOSS), ("Profitable weeks", "3 / 12", LOSS),
+                                             ("Profit from best coin", "115%", LOSS), ("Coins down 90%+", "14", LOSS)],
+                     "ONE LUCKY HIT", LOSS)
+    steady = _receipt("@steady_example", 81, [("Win rate", "58%", (30, 150, 60)), ("Profitable weeks", "10 / 12", (30, 150, 60)),
+                                               ("Profit from best coin", "18%", (30, 150, 60)),
+                                               ("Coins down 90%+", "2", (30, 150, 60))],
+                      "CONSISTENT", (30, 150, 60))
+
+    def rec(r, title):
+        def els(t0, t_out):
+            k = text_img([[(title, TEXT)]], 66, align="center")
+
+            def draw(fr, lt):
+                img, d = _layer()
+                _slot(d, 400)
+                fr.paste(img, (0, 0), img)
+                _print(fr, r, lt, 400)
+            return [centered(k, 280, t0 + 0.05, t_out, dy=0), Anim(draw, t0, t_out)]
+        return els
+    out.append({"say": "That's what Receipts shows you. Send it any fomo trader, and it prints their real score: "
+                       "win rate, profitable weeks, and how many of their coins went down ninety percent.",
+                "els": rec(lucky, "Receipts prints the truth."), "min": 5.5, "sfx": [(0.2, "whoosh"), (1.6, "hit")]})
+    out.append({"say": "Now compare. Smaller wins, but he wins week after week. That's skill.",
+                "els": rec(steady, "Now compare."), "min": 4.5, "sfx": [(0.2, "whoosh"), (1.6, "pop")]})
+
+    def how(t0, t_out):
+        k = text_img([[("5 seconds.", TEXT)]], 96, align="center")
+        tg = (42, 171, 238)
+
+        def draw(fr, lt):
+            img, d = _layer()
+            f = video.font(SEMI, 40)
+            hd = f"@{bot}"
+            d.text(((W - f.getlength(hd)) / 2, 520), hd, font=f, fill=TEXT2 + (255,))
+            if lt > 0.5:
+                _bubble(d, "@lucky_example", 620, True, tg, (255, 255, 255))
+            if lt > 1.3:
+                _bubble(d, "Printing your receipt...", 760, False, (44, 44, 46), TEXT)
+            if lt > 2.1:
+                _bubble(d, "34/100 · ONE LUCKY HIT", 900, False, (44, 44, 46), LOSS)
+            if lt > 2.9:
+                _center_text(d, 1110, "3 free checks a day", 54, GAIN, SEMI)
+            fr.paste(img, (0, 0), img)
+        return [centered(k, 330, t0 + 0.05, t_out, dy=0), Anim(draw, t0, t_out)]
+    out.append({"say": "It takes five seconds. Open Receipts on Telegram, send a handle, get the receipt. "
+                       "Three checks a day are free.",
+                "els": how, "min": 4.5, "sfx": [(0.5, "pop"), (1.3, "pop"), (2.1, "pop")]})
+
+    out.append(video.outro_scene("Check the receipts before you copy.",
+                                 [f"@{bot} on Telegram", "Handles shown are made-up examples"],
+                                 "Before you copy anyone, check the receipts. Find fomo receipts bot on Telegram."))
+    return out
+
+
+def rc_render(out_path):
+    with tempfile.TemporaryDirectory() as wd:
+        return video.build(rc_scenes(), out_path, wd, captions=True, progress=True, sfx=True, pad=0.4)
+
+
+def rc_caption():
+    bot = fmt.receipts_bot() or "fomoreceipts_bot"
+    return ("Up $80K… skill or luck? 🧾\n"
+            f"Receipts scores any fomo trader in 5 seconds: win rate, profitable weeks, coins down 90%+. "
+            f"3 free checks a day: @{bot} on Telegram.\n"
+            "Handles shown are made-up examples. Not financial advice."
+            f"\n\n{video.HASHTAGS} #memecointips #copytrading #fyp")
