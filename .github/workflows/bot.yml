@@ -31,12 +31,16 @@ jobs:
           restore-keys: msm-state-
 
       # Video tools for the TikTok drafts (Pillow, ffmpeg, edge-tts voice, Inter fonts), installed once then cached.
+      # The cached Pillow is built for one Python version: key the cache on it, so a runner with another Python reinstalls.
+      - name: Python version
+        id: py
+        run: echo "v=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')" >> "$GITHUB_OUTPUT"
       - name: Restore video tools
         id: tools
         uses: actions/cache@v4
         with:
           path: .tools
-          key: msm-tools-v2
+          key: msm-tools-v3-py${{ steps.py.outputs.v }}
 
       - name: Install video tools (first run only)
         if: steps.tools.outputs.cache-hit != 'true'
