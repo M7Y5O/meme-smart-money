@@ -1159,3 +1159,143 @@ def hold_caption():
             "Holder count means nothing. Check the top 10 wallets, same-funder bundles and snipers before you buy.\n"
             "Example for illustration. Not financial advice."
             f"\n\n{video.HASHTAGS} #memecointips #bundles #snipers #fyp")
+
+
+# ---------- story 11: take your initials (profit-taking explained, animated, captions) ----------
+_TP_PATH = [(0, 1.0), (.12, 1.4), (.22, 2.0), (.3, 1.75), (.45, 3.4), (.58, 5.0), (.68, 3.1), (.78, 1.3), (.88, .55), (1.0, .2)]
+_TP_SELL = .22  # where the 2x happens
+
+
+def tp_chart(d, box, p, mark=False, label="2x: sell half"):
+    """Price path in a rounded box, drawn up to progress p (0..1). box: (x0, y0, x1, y1)."""
+    x0, y0, x1, y1 = box
+    d.rounded_rectangle(box, radius=44, fill=video.TILE + (255,))
+    ix0, ix1, iy0, iy1 = x0 + 50, x1 - 50, y0 + 110, y1 - 60
+
+    def pt(x, m):
+        return ix0 + (ix1 - ix0) * x, iy1 - (iy1 - iy0) * m / 5.3
+
+    for m in (1, 2, 5):
+        yy = pt(0, m)[1]
+        d.line((ix0, yy, ix1, yy), fill=(255, 255, 255, 22), width=2)
+        f = video.font(MED, 28)
+        d.text((ix1 - f.getlength(f"{m}x"), yy - 36), f"{m}x", font=f, fill=TEXT2 + (255,))
+    d.text((x0 + 36, y0 + 28), "$FROG", font=video.font(DISPLAY, 46), fill=TEXT + (255,))
+    ft = video.font(MED, 28)
+    d.text((x1 - 36 - ft.getlength("example"), y0 + 38), "example", font=ft, fill=TEXT2 + (255,))
+    last = None
+    for (a, ma), (b, mb) in zip(_TP_PATH, _TP_PATH[1:]):
+        if a >= p:
+            break
+        if b > p:
+            mb, b = ma + (mb - ma) * (p - a) / (b - a), p
+        col = GAIN if b <= .58 else LOSS
+        d.line((*pt(a, ma), *pt(b, mb)), fill=col + (255,), width=12, joint="curve")
+        last = (pt(b, mb), col)
+    if last:
+        (hx, hy), col = last
+        d.ellipse((hx - 14, hy - 14, hx + 14, hy + 14), fill=col + (255,))
+    if mark and p >= _TP_SELL:
+        sx, sy = pt(_TP_SELL, 2.0)
+        d.ellipse((sx - 22, sy - 22, sx + 22, sy + 22), fill=GAIN + (255,), outline=(255, 255, 255, 255), width=5)
+        f = video.font(SEMI, 34)
+        w = f.getlength(label) + 36
+        d.rounded_rectangle((sx - 20, sy - 104, sx - 20 + w, sy - 46), radius=29, fill=GAIN + (255,))
+        d.text((sx - 2, sy - 95), label, font=f, fill=(0, 0, 0, 255))
+
+
+def _outcome_tile(title, rows):
+    """Header line + label/value rows on a dark tile."""
+    from PIL import Image
+    h = text_img([[(title, TEXT2)]], 40, SEMI)
+    t = video.tile(rows)
+    img = Image.new("RGBA", (t.width, h.height + 18 + t.height), (0, 0, 0, 0))
+    img.paste(h, (6, 0), h)
+    img.paste(t, (0, h.height + 18), t)
+    return img
+
+
+def tp_scenes():
+    out = []
+
+    def hook(t0, t_out):
+        def draw(fr, lt):
+            img, d = _layer()
+            if lt < 3.0:  # this Anim starts at t=-1, so lt 3.0 is 2s into the video
+                v = int(400 * video.ease((lt - 1.2) / 1.4))
+                _center_text(d, 560, f"+{v}%", 230, GAIN)
+                _center_text(d, 860, "You were up.", 64, TEXT)
+            else:
+                _center_text(d, 560, "-80%", 230, LOSS)
+                _center_text(d, 860, "You sold here.", 64, TEXT)
+            fr.paste(img, (0, 0), img)
+        return [Anim(draw, -1, t_out), Anim(lambda fr, lt: _flash(fr, lt), t0 + 2.0, t0 + 2.5)]
+    out.append({"say": "You were up four hundred percent. You sold at minus eighty. Here's the rule that stops that from happening.",
+                "els": hook, "min": 4.0, "sfx": [(2.0, "hit")]})
+
+    def ride(t0, t_out):
+        k = text_img([[("The round trip.", TEXT)]], 80, align="center")
+
+        def draw(fr, lt):
+            img, d = _layer()
+            tp_chart(d, (MARGIN, 520, W - MARGIN, 1180), video.ease((lt - 0.2) / 3.2))
+            fr.paste(img, (0, 0), img)
+        return [centered(k, 340, t0 + 0.05, t_out, dy=0), Anim(draw, t0 + 0.1, t_out)]
+    out.append({"say": "Memecoins go up fast, and come down even faster. Most people ride the whole round trip, "
+                       "waiting for one more pump.",
+                "els": ride, "min": 4.5, "sfx": [(0.3, "whoosh")]})
+
+    out.append(statement([[("Take your", TEXT)], [("initials.", GAIN)]],
+                         "The fix has a name. Take your initials.", kicker="The rule", min_dur=2.6))
+
+    def sell(t0, t_out):
+        k = text_img([[("At 2x, sell half.", TEXT)]], 80, align="center")
+
+        def draw(fr, lt):
+            img, d = _layer()
+            tp_chart(d, (MARGIN, 520, W - MARGIN, 1180), min(_TP_SELL, 0.02 + video.ease((lt - 0.2) / 1.2) * _TP_SELL),
+                     mark=lt > 1.4)
+            fr.paste(img, (0, 0), img)
+        return [centered(k, 340, t0 + 0.05, t_out, dy=0), Anim(draw, t0 + 0.1, t_out)]
+    out.append({"say": "When your coin does a two x, sell half. That gives you back everything you put in.",
+                "els": sell, "min": 3.8, "sfx": [(1.5, "pop")]})
+
+    def math(t0, t_out):
+        k = text_img([[("The math", TEXT2)]], 44, SEMI)
+        big = text_img([[("Free ride.", GAIN)]], 130)
+        card = video.tile([("You put in", "$100", None), ("At 2x, you sell half", "+$100 back", GAIN),
+                           ("Still in the coin", "$100, free", GAIN)])
+        y = 300
+        return [El(k, MARGIN, y, t0 + 0.05, t_out, dy=0), El(big, MARGIN, y + k.height + 20, t0 + 0.15, t_out, dy=50, dur=0.55),
+                El(card, MARGIN, y + k.height + big.height + 80, t0 + 0.5, t_out, dy=50)]
+    out.append({"say": "A hundred dollars in. At two x, you sell half and a hundred comes back to your wallet. "
+                       "The other half stays in the coin, and you can't lose your own money anymore.",
+                "els": math, "min": 5.0, "sfx": [(0.5, "pop")]})
+
+    def outcomes(t0, t_out):
+        a = _outcome_tile("If the coin dies", [("Held everything", "$0", LOSS), ("Took initials", "$100", GAIN)])
+        b = _outcome_tile("If the coin does 10x", [("Held everything", "$1,000", GAIN), ("Took initials", "$600", GAIN)])
+        return [El(a, MARGIN, 300, t0 + 0.1, t_out, dy=50), El(b, MARGIN, 300 + a.height + 60, t0 + 2.6, t_out, dy=50)]
+    out.append({"say": "If the coin dies, holders end with zero. You keep your hundred. If it does a ten x, you still make six hundred. "
+                       "You give up a little of the moon, and you never lose your stack.",
+                "els": outcomes, "min": 6.0, "sfx": [(0.1, "pop"), (2.6, "pop")]})
+
+    out.append(statement([[("Profits only count", TEXT)], [("when you sell.", GAIN)]],
+                         "Remember: profits only count when you sell.", min_dur=2.6))
+    ch = os.environ.get("TELEGRAM_CHANNEL", "").strip()
+    out.append(video.outro_scene("Take profits. Not lessons.",
+                                 ([f"Live alerts: {ch}"] if ch else []) + ["$FROG is a made-up example"],
+                                 "Take profits, not lessons. Follow for more, and get our live alerts on Telegram."))
+    return out
+
+
+def tp_render(out_path):
+    with tempfile.TemporaryDirectory() as wd:
+        return video.build(tp_scenes(), out_path, wd, captions=True, progress=True, sfx=True, pad=0.4)
+
+
+def tp_caption():
+    return ("You were up 400%. You sold at -80%. 📉\n"
+            "The rule: take your initials. At 2x, sell half: your $100 is back, the rest rides free.\n"
+            "$FROG is a made-up example. Not financial advice."
+            f"\n\n{video.HASHTAGS} #memecointips #takeprofit #fyp")
