@@ -19,6 +19,7 @@
   python -m msm story-why      # brand video ("Why $SMART MONEY exists")
   python -m msm story-rug      # animated video with captions ("How most people lose money on memecoins")
   python -m msm story-liq      # animated video with captions ("Market cap is a lie")
+  python -m msm story-hold     # animated video with captions ("Holders lie")
   python -m msm receipts       # post the weekly scorecard of our own alerts now
   python -m msm sync           # send the bot's activity to the dashboard database (DATABASE_URL) now
   python -m msm traders        # fetch and print today's top traders from the Fomo API
@@ -140,6 +141,9 @@ def main(argv):
     elif cmd == "story-liq":  # animated video with captions: "Market cap is a lie" (liquidity explained)
         from . import story
         print("story video:", bot.tiktok("story liquidity", story.liq_render, story.liq_caption()))
+    elif cmd == "story-hold":  # animated video with captions: "Holders lie" (top holders, bundles, snipers)
+        from . import story
+        print("story video:", bot.tiktok("story holders", story.hold_render, story.hold_caption()))
     elif cmd == "receipts":  # weekly scorecard of our own alerts (market cap at alert vs now), posted now
         bot.refresh_wallets()
         print("receipts:", bot.post_receipts())
