@@ -1014,3 +1014,148 @@ def liq_caption():
             "Before you buy: liquidity vs mcap, who holds the pool, is the volume real?\n"
             "$FROG is a made-up example. Not financial advice."
             f"\n\n{video.HASHTAGS} #memecointips #liquidity #rugpull #fyp")
+
+
+# ---------- story 10: holders lie (top holders, bundles, snipers; animated, captions) ----------
+_WALLETS = [(170, 690), (330, 610), (520, 650), (720, 600), (900, 680), (230, 820), (430, 790), (640, 830),
+            (850, 800), (150, 960), (360, 940), (560, 980), (760, 950), (930, 930), (260, 1080), (480, 1100),
+            (690, 1090), (880, 1070)]
+_BUNDLE = {1, 3, 6, 8, 10, 12, 15, 16}  # the wallets secretly funded by the same wallet
+
+
+def _wallets(frame, link=0.0, red=0.0, gone=0.0):
+    """Dots for wallets. link: lines to the funder appear (0..1). red: bundle turns red. gone: bundle fades out."""
+    img, d = _layer()
+    fx, fy = W / 2, 500
+    if link > 0:
+        for i in sorted(_BUNDLE):
+            x, y = _WALLETS[i]
+            y = 620 + (y - 600) * 0.86
+            d.line((fx, fy, fx + (x - fx) * link, fy + (y - fy) * link), fill=LOSS + (int(170 * (1 - gone)),), width=5)
+        r = 46 * video.ease(link / 0.4)
+        d.ellipse((fx - r, fy - r, fx + r, fy + r), fill=LOSS + (255,))
+        if link > 0.5:
+            f = video.font(SEMI, 34)
+            t = "1 funding wallet"
+            d.text((fx + 66, fy - 20), t, font=f, fill=LOSS + (255,))
+    for i, (x, y) in enumerate(_WALLETS):
+        y = 620 + (y - 600) * 0.86
+        b = i in _BUNDLE
+        col = tuple(int(GAIN[k] + (LOSS[k] - GAIN[k]) * red) for k in range(3)) if b else GAIN
+        a = int(255 * (1 - gone)) if b else 255
+        d.ellipse((x - 30, y - 30, x + 30, y + 30), fill=col + (a,))
+    frame.paste(img, (0, 0), img)
+
+
+def _supply_bar(d, y, top, label_top):
+    x0, x1, h = MARGIN, W - MARGIN, 120
+    d.rounded_rectangle((x0, y, x1, y + h), radius=30, fill=(44, 44, 46, 255))
+    if top > 0.005:
+        d.rounded_rectangle((x0, y, x0 + (x1 - x0) * top, y + h), radius=30, fill=LOSS + (255,))
+    f = video.font(DISPLAY, 64)
+    t = f"{top * 100:.0f}%"
+    d.text((x0 + 30, y + 22), t, font=f, fill=TEXT + (255,))
+    fl = video.font(MED, 38)
+    d.text((x0, y + h + 26), label_top, font=fl, fill=LOSS + (255,))
+    r = "everyone else"
+    d.text((x1 - fl.getlength(r), y + h + 26), r, font=fl, fill=TEXT2 + (255,))
+
+
+def hold_scenes():
+    out = []
+
+    def hook(t0, t_out):
+        def draw(fr, lt):
+            img, d = _layer()
+            n = int(1200 * video.ease(lt / 1.0))
+            _center_text(d, 520, f"{n:,}", 230, TEXT)
+            _center_text(d, 790, "holders", 60, TEXT2, SEMI)
+            if lt > 1.6:
+                _center_text(d, 900, "1 owner.", 96, LOSS)
+            fr.paste(img, (0, 0), img)
+        return [Anim(draw, -1, t_out)]
+    out.append({"say": "This coin has twelve hundred holders. Looks safe, right? One person controls half of it.",
+                "els": hook, "min": 3.6, "sfx": [(1.6, "hit")]})
+
+    def top10(t0, t_out):
+        k = text_img([[("Who owns the supply?", TEXT)]], 76, align="center")
+
+        def draw(fr, lt):
+            img, d = _layer()
+            _supply_bar(d, 700, 0.48 * video.ease((lt - 0.4) / 1.4), "top 10 wallets")
+            fr.paste(img, (0, 0), img)
+        return [centered(k, 360, t0 + 0.05, t_out, dy=0), Anim(draw, t0 + 0.1, t_out)]
+    out.append({"say": "The holder count doesn't matter. Look at the top ten wallets. Here, they own almost half the supply.",
+                "els": top10, "min": 4.5, "sfx": [(0.4, "whoosh")]})
+
+    def bundle(t0, t_out):
+        k = text_img([[("Different wallets?", TEXT)]], 76, align="center")
+
+        def draw(fr, lt):
+            _wallets(fr, link=video.ease((lt - 1.5) / 1.2), red=video.ease((lt - 1.5) / 0.8))
+        return [centered(k, 300, t0 + 0.05, t_out, dy=0), Anim(draw, t0 + 0.1, t_out)]
+    out.append({"say": "And many of those wallets? Funded by the same wallet, minutes before launch. "
+                       "That's a bundle: one person, wearing many disguises.",
+                "els": bundle, "min": 5.0, "sfx": [(1.5, "pop")]})
+
+    def dump(t0, t_out):
+        k = text_img([[("They sell together.", TEXT)]], 76, align="center")
+
+        def draw(fr, lt):
+            p = video.ease((lt - 0.8) / 0.6)
+            _wallets(fr, link=1.0, red=1.0, gone=p)
+            if lt > 0.8:
+                img, d = _layer()
+                _center_text(d, 1120, f"-{80 * p:.0f}%", 90, LOSS)
+                fr.paste(img, (0, 0), img)
+        return [centered(k, 300, t0 + 0.05, t_out, dy=0), Anim(draw, t0, t_out),
+                Anim(lambda fr, lt: _flash(fr, lt), t0 + 0.9, t0 + 1.4)]
+    out.append({"say": "When they sell, they sell together, and the chart dies in seconds. The holder count never warned you.",
+                "els": dump, "min": 4.0, "sfx": [(0.9, "hit")]})
+
+    def snipers(t0, t_out):
+        k = text_img([[("Bought in the first second?", TEXT)]], 70, align="center")
+
+        def draw(fr, lt):
+            img, d = _layer()
+            f = video.font(DISPLAY, 200)
+            t = "0.4s"
+            d.text(((W - f.getlength(t)) / 2, 560), t, font=f, fill=LOSS + (255,))
+            _center_text(d, 820, "after launch", 54, TEXT2, SEMI)
+            if lt > 1.2:
+                _center_text(d, 950, "= sniper", 84, TEXT)
+            fr.paste(img, (0, 0), img)
+        return [centered(k, 360, t0 + 0.05, t_out, dy=0), Anim(draw, t0 + 0.3, t_out)]
+    out.append({"say": "Then there are snipers: bots that buy in the very first second. They're not believers. "
+                       "They're waiting for you to buy, so they can sell to you.",
+                "els": snipers, "min": 4.5, "sfx": [(0.3, "pop")]})
+
+    def checks(t0, t_out):
+        r = text_img([[("Before you buy", TEXT2)]], 44, SEMI)
+        big = text_img([[("3 checks", TEXT)]], 130)
+        card = video.tile([("Top 10 wallets", "Not half the supply", GAIN), ("Same funder", "No clusters", GAIN),
+                           ("Snipers", "Few, or gone", GAIN)])
+        y = 300
+        return [El(r, MARGIN, y, t0 + 0.05, t_out, dy=0), El(big, MARGIN, y + r.height + 20, t0 + 0.15, t_out, dy=50, dur=0.55),
+                El(card, MARGIN, y + r.height + big.height + 80, t0 + 0.45, t_out, dy=50)]
+    out.append({"say": "So before you buy, check three things. How much the top ten wallets hold. Whether wallets share "
+                       "the same funder. And how many snipers are still in.",
+                "els": checks, "min": 4.0, "sfx": [(0.15, "pop")]})
+    ch = os.environ.get("TELEGRAM_CHANNEL", "").strip()
+    out.append(video.outro_scene("Holders lie. Wallets don't.",
+                                 ([f"Live alerts: {ch}"] if ch else []) + ["Example for illustration"],
+                                 "Holders lie. Wallets don't. That's why we track wallets. Follow for more, "
+                                 "and get our live alerts on Telegram."))
+    return out
+
+
+def hold_render(out_path):
+    with tempfile.TemporaryDirectory() as wd:
+        return video.build(hold_scenes(), out_path, wd, captions=True, progress=True, sfx=True, pad=0.4)
+
+
+def hold_caption():
+    return ("1,200 holders. 1 owner. 🎭\n"
+            "Holder count means nothing. Check the top 10 wallets, same-funder bundles and snipers before you buy.\n"
+            "Example for illustration. Not financial advice."
+            f"\n\n{video.HASHTAGS} #memecointips #bundles #snipers #fyp")
