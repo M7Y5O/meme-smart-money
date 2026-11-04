@@ -1483,3 +1483,120 @@ def rc_caption():
             f"3 free checks a day: @{bot} on Telegram.\n"
             "Handles shown are made-up examples. Not financial advice."
             f"\n\n{video.HASHTAGS} #memecointips #copytrading #fyp")
+
+
+# ---------- story 13: rug or not? (promotes Receipts /rug, animated, captions) ----------
+def _rug_card(score, level, col, rows, shown, w=W - 2 * MARGIN):
+    """Receipts /rug answer as a card. rows: [(text, bad)]; only the first `shown` rows are drawn."""
+    from PIL import Image, ImageDraw
+    rh, top = 88, 250
+    h = top + rh * len(rows) + 40
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((0, 0, w - 1, h - 1), radius=40, fill=video.TILE + (255,), outline=col + (255,), width=4)
+    d.text((48, 40), "RUG RISK", font=video.font(SEMI, 36), fill=TEXT2 + (255,))
+    fs, ft = video.font(DISPLAY, 120), video.font(SEMI, 44)
+    s = f"{score}"
+    d.text((48, 86), s, font=fs, fill=col + (255,))
+    d.text((48 + fs.getlength(s) + 10, 150), "/100", font=ft, fill=TEXT2 + (255,))
+    fl = video.font(DISPLAY, 50)
+    d.text((w - 48 - fl.getlength(level), 150), level, font=fl, fill=col + (255,))
+    d.line((48, top - 20, w - 48, top - 20), fill=(255, 255, 255, 30), width=2)
+    f = video.font(MED, 40)
+    for i, (txt, bad) in enumerate(rows[:shown]):
+        y = top + i * rh
+        mark, mc = ("!", LOSS) if bad else ("✓", GAIN)
+        d.ellipse((48, y + 6, 100, y + 58), fill=mc + (255,))
+        fm = video.font(DISPLAY, 34)
+        d.text((74 - fm.getlength(mark) / 2, y + 12), mark, font=fm, fill=(0, 0, 0, 255))
+        d.text((128, y + 10), txt, font=video.font(MED, fit(txt, MED, 40, w - 180)), fill=TEXT + (255,))
+    return img
+
+
+def rug_promo_scenes():
+    out = []
+    bot = fmt.receipts_bot() or "fomoreceipts_bot"
+
+    def hook(t0, t_out):
+        def draw(fr, lt):
+            img, d = _layer()
+            _center_text(d, 520, "RUG?", 260, LOSS if lt > 1.6 else TEXT)
+            _center_text(d, 830, "Before you ape,", 64, TEXT2, SEMI)
+            if lt > 2.2:
+                _center_text(d, 920, "check the coin.", 72, TEXT)
+            fr.paste(img, (0, 0), img)
+        return [Anim(draw, -1, t_out), Anim(lambda fr, lt: _flash(fr, lt), t0 + 0.6, t0 + 1.1)]
+    out.append({"say": "Before you buy your next memecoin, ask one question. Can the dev rug it?",
+                "els": hook, "min": 3.4, "sfx": [(0.6, "hit")]})
+
+    bad = [("Liquidity not locked", True), ("Dev can still mint tokens", True),
+           ("9 linked wallets hold 31%", True), ("Top 10 wallets hold 58%", True)]
+
+    def chat_bad(t0, t_out):
+        tg = (42, 171, 238)
+
+        def draw(fr, lt):
+            img, d = _layer()
+            f = video.font(SEMI, 40)
+            hd = f"@{bot}"
+            d.text(((W - f.getlength(hd)) / 2, 300), hd, font=f, fill=TEXT2 + (255,))
+            if lt > 0.3:
+                _bubble(d, "/rug 7xKp...frog", 390, True, tg, (255, 255, 255))
+            if lt > 1.1:
+                n = min(len(bad), int((lt - 1.4) / 0.9) + 1) if lt > 1.4 else 0
+                card = _rug_card(82, "VERY HIGH", LOSS, bad, n)
+                img.paste(card, (MARGIN, 540), card)
+            fr.paste(img, (0, 0), img)
+        return [Anim(draw, t0, t_out)]
+    out.append({"say": "Paste any Solana coin into Receipts. In seconds, you get a rug risk score, and the red flags behind it. "
+                       "Liquidity not locked. The dev can still mint. Nine linked wallets holding a third of the supply.",
+                "els": chat_bad, "min": 6.0, "sfx": [(0.3, "pop"), (1.1, "hit"), (1.4, "pop"), (2.3, "pop"), (3.2, "pop"), (4.1, "pop")]})
+
+    good = [("Liquidity locked", False), ("Mint and freeze revoked", False), ("Top 10 wallets hold 18%", False)]
+
+    def chat_good(t0, t_out):
+        k = text_img([[("Or a green light.", TEXT)]], 80, align="center")
+
+        def draw(fr, lt):
+            img, d = _layer()
+            n = min(len(good), int((lt - 0.6) / 0.6) + 1) if lt > 0.6 else 0
+            card = _rug_card(12, "LOW", GAIN, good, n)
+            img.paste(card, (MARGIN, 540), card)
+            fr.paste(img, (0, 0), img)
+        return [centered(k, 340, t0 + 0.05, t_out, dy=0), Anim(draw, t0 + 0.2, t_out)]
+    out.append({"say": "Or a green light: liquidity locked, mint revoked, supply spread out.",
+                "els": chat_good, "min": 4.0, "sfx": [(0.6, "pop"), (1.2, "pop"), (1.8, "pop")]})
+
+    def checks(t0, t_out):
+        r = text_img([[("What it checks", TEXT2)]], 44, SEMI)
+        big = text_img([[("How rugs happen.", TEXT)]], 104)
+        card = video.tile([("Pull the liquidity?", "Locked?", GAIN), ("Print or freeze?", "Revoked?", GAIN),
+                           ("Who holds the supply?", "Spread out?", GAIN)])
+        y = 300
+        return [El(r, MARGIN, y, t0 + 0.05, t_out, dy=0), El(big, MARGIN, y + r.height + 20, t0 + 0.15, t_out, dy=50, dur=0.55),
+                El(card, MARGIN, y + r.height + big.height + 80, t0 + 0.5, t_out, dy=50)]
+    out.append({"say": "It checks what rugs are made of. Can the dev pull the liquidity? Print more coins, or freeze your wallet? "
+                       "And who really holds the supply?",
+                "els": checks, "min": 5.0, "sfx": [(0.5, "pop")]})
+
+    out.append(statement([[("A score,", TEXT)], [("not a crystal ball.", TEXT2)]],
+                         "It's a risk score, not a crystal ball. Low risk doesn't mean safe. But high risk? Walk away.",
+                         min_dur=3.0))
+    out.append(video.outro_scene("Check before you ape.",
+                                 [f"/rug on @{bot}", "3 free checks a day · coins shown are examples"],
+                                 "Check before you ape. Send slash rug to fomo receipts bot on Telegram. Three checks a day are free."))
+    return out
+
+
+def rug_promo_render(out_path):
+    with tempfile.TemporaryDirectory() as wd:
+        return video.build(rug_promo_scenes(), out_path, wd, captions=True, progress=True, sfx=True, pad=0.4)
+
+
+def rug_promo_caption():
+    bot = fmt.receipts_bot() or "fomoreceipts_bot"
+    return ("Can the dev rug it? 🔴🟢\n"
+            f"Paste any Solana coin into Receipts: /rug gives a rug risk score + the red flags (liquidity lock, mint, "
+            f"linked wallets, top holders). 3 free checks a day: @{bot} on Telegram.\n"
+            "Coins shown are examples. A risk score, not a prediction. Not financial advice."
+            f"\n\n{video.HASHTAGS} #rugpull #memecointips #solana #fyp")
