@@ -22,6 +22,7 @@
   python -m msm story-hold     # animated video with captions ("Holders lie")
   python -m msm story-tp       # animated video with captions ("Take your initials")
   python -m msm story-receipts # animated video with captions promoting Receipts ("Skill or luck?")
+  python -m msm story-rugcheck # animated video with captions promoting Receipts /rug ("Rug?")
   python -m msm receipts       # post the weekly scorecard of our own alerts now
   python -m msm sync           # send the bot's activity to the dashboard database (DATABASE_URL) now
   python -m msm traders        # fetch and print today's top traders from the Fomo API
@@ -152,6 +153,9 @@ def main(argv):
     elif cmd == "story-receipts":  # animated video with captions promoting Receipts: "Skill or luck?"
         from . import story
         print("story video:", bot.tiktok("story receipts", story.rc_render, story.rc_caption()))
+    elif cmd == "story-rugcheck":  # animated video with captions promoting Receipts /rug: "Check before you ape"
+        from . import story
+        print("story video:", bot.tiktok("story rug check", story.rug_promo_render, story.rug_promo_caption()))
     elif cmd == "receipts":  # weekly scorecard of our own alerts (market cap at alert vs now), posted now
         bot.refresh_wallets()
         print("receipts:", bot.post_receipts())
